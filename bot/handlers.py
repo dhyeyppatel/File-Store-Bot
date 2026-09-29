@@ -237,7 +237,11 @@ def register_handlers(bot):
                     return
                     
                 webhook_url = f"{base_url}/api?token={token}"
-                new_bot.set_webhook(url=webhook_url)
+                secret_token = os.getenv('WEBHOOK_SECRET')
+                if secret_token:
+                    new_bot.set_webhook(url=webhook_url, secret_token=secret_token)
+                else:
+                    new_bot.set_webhook(url=webhook_url)
                 
                 database.add_cloned_bot(user_id, token, bot_info.username)
                 database.set_user_state(user_id, None)
