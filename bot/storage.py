@@ -1,4 +1,5 @@
 import os
+import telebot
 from bot.database import get_db
 from bot.tokens import generate_token, hash_token
 from bot.telegram import bot
@@ -12,32 +13,92 @@ def chunk_list(lst, n):
 # /upload flow
 # ─────────────────────────────────────────────
 
-def store_session(user_id, message_ids):
+def store_session(user_id, items_data):
     """
-    Copy messages from user's PM to the database channel, save their
-    new IDs, generate a token and return (token, stored_count, failed_count).
-    message_ids: list of ints (the user's original message IDs in bot PM).
+    Copy/group messages into the storage channel and return a shareable token.
+
+    items_data can be a mix of:
+      - int  → bare message_id (Group Media OFF)
+      - dict → {message_id, media_type, file_id} (Group Media ON)
+
+    When dicts are present, media of the same type are grouped into albums
+    (send_media_group, up to 10 per group). Non-groupable items (text, sticker,
+    etc.) are forwarded individually via copy_messages.
     """
     storage_chat_id = os.getenv('STORAGE_CHAT_ID')
     db = get_db()
 
-    message_ids = sorted(set(message_ids))   # dedup + sort (Telegram requires ascending order)
-
     storage_message_ids = []
     failed = 0
 
-    for chunk in chunk_list(message_ids, 100):
-        try:
-            result = bot.copy_messages(
-                chat_id=storage_chat_id,
-                from_chat_id=user_id,
-                message_ids=chunk
-            )
-            for msg_obj in result:
-                storage_message_ids.append(msg_obj.message_id)
-        except Exception as e:
-            print(f"[store_session] copy_messages failed: {e}")
-            failed += len(chunk)
+    # ── Detect mode ──────────────────────────────────────────────────────────
+    has_metadata = any(isinstance(i, dict) for i in items_data)
+
+    if not has_metadata:
+        # ── Simple mode (Group Media OFF): bulk copy_messages ────────────────
+        message_ids = sorted(set(int(i) for i in items_data))
+        for chunk in chunk_list(message_ids, 100):
+            try:
+                result = bot.copy_messages(
+                    chat_id=storage_chat_id,
+                    from_chat_id=user_id,
+                    message_ids=chunk
+                )
+                for msg_obj in result:
+                    storage_message_ids.append(msg_obj.message_id)
+            except Exception as e:
+                print(f"[store_session] copy_messages failed: {e}")
+                failed += len(chunk)
+    else:
+        # ── Grouped mode (Group Media ON) ────────────────────────────────────
+        GROUPABLE = {'photo', 'video', 'document', 'audio'}
+        groups = {}    # media_type → [file_id, ...]
+        singles = []   # message_ids for non-groupable (text, sticker, etc.)
+
+        for item in items_data:
+            if isinstance(item, dict):
+                mt = item.get('media_type', 'other')
+                fid = item.get('file_id')
+                if mt in GROUPABLE and fid:
+                    groups.setdefault(mt, []).append(fid)
+                else:
+                    singles.append(item['message_id'])
+            else:
+                singles.append(int(item))
+
+        # Send each media type as albums (≤10 per group)
+        MEDIA_CLS = {
+            'photo':    telebot.types.InputMediaPhoto,
+            'video':    telebot.types.InputMediaVideo,
+            'document': telebot.types.InputMediaDocument,
+            'audio':    telebot.types.InputMediaAudio,
+        }
+        for mt, fids in groups.items():
+            for chunk in chunk_list(fids, 10):
+                media_group = [MEDIA_CLS[mt](fid) for fid in chunk]
+                try:
+                    sent = bot.send_media_group(chat_id=storage_chat_id, media=media_group)
+                    for m in sent:
+                        storage_message_ids.append(m.message_id)
+                except Exception as e:
+                    print(f"[store_session] send_media_group({mt}) failed: {e}")
+                    failed += len(chunk)
+
+        # Send singles via copy_messages
+        if singles:
+            singles.sort()
+            for chunk in chunk_list(singles, 100):
+                try:
+                    result = bot.copy_messages(
+                        chat_id=storage_chat_id,
+                        from_chat_id=user_id,
+                        message_ids=chunk
+                    )
+                    for msg_obj in result:
+                        storage_message_ids.append(msg_obj.message_id)
+                except Exception as e:
+                    print(f"[store_session] copy_messages(singles) failed: {e}")
+                    failed += len(chunk)
 
     if not storage_message_ids:
         return None

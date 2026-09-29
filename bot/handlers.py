@@ -217,8 +217,27 @@ def handle_all_messages(message):
     user_settings = settings.get_user_settings(user_id)
     grouping = user_settings.get("group_media", False)
 
-    # When OFF: silently cap at 20
-    if not grouping and len(session.get('message_ids', [])) >= 20:
+    # When OFF: silently cap at 20, store bare message ID
+    if not grouping:
+        if len(session.get('message_ids', [])) >= 20:
+            return
+        upload_session.add_message(user_id, message.message_id)
         return
 
-    upload_session.add_message(user_id, message.message_id)
+    # When ON: store metadata so storage.py can group into albums
+    if message.photo:
+        mt, fid = 'photo', message.photo[-1].file_id
+    elif message.video:
+        mt, fid = 'video', message.video.file_id
+    elif message.document:
+        mt, fid = 'document', message.document.file_id
+    elif message.audio:
+        mt, fid = 'audio', message.audio.file_id
+    else:
+        mt, fid = 'other', None
+
+    upload_session.add_message(user_id, {
+        "message_id": message.message_id,
+        "media_type": mt,
+        "file_id": fid
+    })
