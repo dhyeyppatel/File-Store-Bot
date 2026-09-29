@@ -111,8 +111,8 @@ def handle_settings(message):
     status = "ON 🟢" if grouping else "OFF 🔴"
     text = (f"⚙️ Settings\n\n"
             f"Group Media: {status}\n\n"
-            f"If ON, the bot will group media into albums (up to 10 items) when storing, allowing you to bypass the 20-item rate limit by bundling them together.\n"
-            f"If OFF, the bot will store them normally (max 20 per minute).")
+            f"If ON, the bot will group media into albums (up to 10 items) when storing.\n"
+            f"If OFF, the bot will store them normally, but you are limited to a maximum of 20 items per upload. If you need to upload more than 20 items at once, please turn on Group Media.")
             
     bot.send_message(
         message.chat.id, 
@@ -128,8 +128,8 @@ def handle_toggle_grouping(call):
     
     text = (f"⚙️ Settings\n\n"
             f"Group Media: {status}\n\n"
-            f"If ON, the bot will group media into albums (up to 10 items) when storing, allowing you to bypass the 20-item rate limit by bundling them together.\n"
-            f"If OFF, the bot will store them normally (max 20 per minute).")
+            f"If ON, the bot will group media into albums (up to 10 items) when storing.\n"
+            f"If OFF, the bot will store them normally, but you are limited to a maximum of 20 items per upload. If you need to upload more than 20 items at once, please turn on Group Media.")
             
     bot.edit_message_text(
         text,
@@ -253,17 +253,20 @@ def handle_all_messages(message):
     user_settings = settings.get_user_settings(user_id)
     grouping = user_settings.get("group_media", False)
     
-    if not grouping and len(session.get('items', [])) >= 20:
-        bot.send_message(user_id, "⚠️ Maximum 20 items allowed when Group Media is OFF. Please press ✅ Done.")
-        return
-        
-    media_type, file_id = extract_media_info(message)
-    item_data = {
-        "message_id": message.message_id,
-        "chat_id": user_id,
-        "media_type": media_type,
-        "file_id": file_id
-    }
-        
-    # Add item to session
-    upload_session.add_item_to_session(user_id, item_data)
+    if not grouping:
+        # Silently ignore messages past 20 as instructed
+        if len(session.get('items', [])) >= 20:
+            return
+        # Store bare integer message_id when OFF to avoid live metadata extraction processing
+        upload_session.add_item_to_session(user_id, message.message_id)
+    else:
+        # Extract live metadata for albums when ON
+        media_type, file_id = extract_media_info(message)
+        item_data = {
+            "message_id": message.message_id,
+            "chat_id": user_id,
+            "media_type": media_type,
+            "file_id": file_id
+        }
+        # Add dictionary to session
+        upload_session.add_item_to_session(user_id, item_data)
