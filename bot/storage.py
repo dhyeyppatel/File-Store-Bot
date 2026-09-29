@@ -4,6 +4,7 @@ from bot.tokens import generate_token, hash_token
 from bot.telegram import bot
 from bot.rate_limiter import RateLimiter, RateLimitExceeded
 from datetime import datetime, timezone
+import time
 import telebot
 
 rate_limiter = RateLimiter()
@@ -40,8 +41,13 @@ def store_session(user_id, items_data, group_media=False):
             message_ids = [item['message_id'] if isinstance(item, dict) else item for item in items_data]
             message_ids.sort() # Telegram API requires strictly increasing order
             
+            start_time = time.time()
             for chunk in chunk_list(message_ids, 100):
                 if aborted_by_rate_limit:
+                    break
+                # Safely exit if nearing Vercel 60s limit
+                if time.time() - start_time > 50:
+                    aborted_by_rate_limit = True
                     break
                 try:
                     copied_msgs = rate_limiter.execute(
@@ -74,11 +80,15 @@ def store_session(user_id, items_data, group_media=False):
                     others.append(item)
                     
             # Send grouped media
+            start_time = time.time()
             for mt, media_list in groups.items():
                 if aborted_by_rate_limit:
                     break
                     
                 for chunk in chunk_list(media_list, 10):
+                    if time.time() - start_time > 50:
+                        aborted_by_rate_limit = True
+                        break
                     media_group = []
                     for f_id in chunk:
                         if mt == 'photo':
@@ -108,8 +118,13 @@ def store_session(user_id, items_data, group_media=False):
             # Send unsupported formats natively using chunked copy_messages
             if not aborted_by_rate_limit:
                 others.sort() # Telegram API requires strictly increasing order
+                start_time = time.time()
                 for chunk in chunk_list(others, 100):
                     if aborted_by_rate_limit:
+                        break
+                    # Safely exit if nearing Vercel 60s limit
+                    if time.time() - start_time > 50:
+                        aborted_by_rate_limit = True
                         break
                     try:
                         copied_msgs = rate_limiter.execute(
