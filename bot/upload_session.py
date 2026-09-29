@@ -13,7 +13,7 @@ def start_session(user_id):
         {
             "$set": {
                 "status": "uploading",
-                "message_ids": [],
+                "items": [],
                 "started_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc)
             }

@@ -37,7 +37,7 @@ def store_session(user_id, items_data, group_media=False):
     try:
         if not group_media:
             # Process using highly efficient copy_messages (100 items per request)
-            message_ids = [item['message_id'] for item in items_data]
+            message_ids = [item['message_id'] if isinstance(item, dict) else item for item in items_data]
             for chunk in chunk_list(message_ids, 100):
                 if aborted_by_rate_limit:
                     break
@@ -62,11 +62,14 @@ def store_session(user_id, items_data, group_media=False):
             others = []
             
             for item in items_data:
-                mt = item['media_type']
-                if mt in ['photo', 'video', 'document', 'audio']:
-                    groups.setdefault(mt, []).append(item['file_id'])
+                if isinstance(item, dict):
+                    mt = item['media_type']
+                    if mt in ['photo', 'video', 'document', 'audio']:
+                        groups.setdefault(mt, []).append(item['file_id'])
+                    else:
+                        others.append(item['message_id'])
                 else:
-                    others.append(item['message_id'])
+                    others.append(item)
                     
             # Send grouped media
             for mt, media_list in groups.items():
