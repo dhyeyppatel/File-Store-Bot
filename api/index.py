@@ -36,7 +36,7 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if 'setup=true' in self.path:
             import telebot
-            from bot.telegram import bot
+            from bot.telegram import bot as tg_bot
             from telebot.types import BotCommand
             
             # Auto-detect domain from host header if BASE_URL is not provided
@@ -57,16 +57,16 @@ class handler(BaseHTTPRequestHandler):
             try:
                 # 1. Set Webhook
                 if secret_token:
-                    bot.set_webhook(url=webhook_url, secret_token=secret_token)
+                    tg_bot.set_webhook(url=webhook_url, secret_token=secret_token)
                 else:
-                    bot.set_webhook(url=webhook_url)
+                    tg_bot.set_webhook(url=webhook_url)
                     
                 # 2. Set Bot Commands
                 commands = [
                     BotCommand("start", "Start the bot"),
                     BotCommand("upload", "Start a new file upload session")
                 ]
-                bot.set_my_commands(commands)
+                tg_bot.set_my_commands(commands)
                 
                 self.send_response(200)
                 self.send_header('Content-type', 'text/plain')
