@@ -50,17 +50,13 @@ def store_session(user_id, items_data, group_media=False):
                     aborted_by_rate_limit = True
                     break
                 try:
-                    copied_msgs = rate_limiter.execute(
-                        bot.copy_messages,
+                    copied_msgs = bot.copy_messages(
                         chat_id=storage_chat_id,
                         from_chat_id=user_id,
                         message_ids=chunk
                     )
                     for msg_id_obj in copied_msgs:
                         storage_items.append(msg_id_obj.message_id)
-                except RateLimitExceeded:
-                    aborted_by_rate_limit = True
-                    break
                 except Exception as e:
                     print(f"Failed to copy batch of messages: {e}")
                     failed += len(chunk)
@@ -101,16 +97,12 @@ def store_session(user_id, items_data, group_media=False):
                             media_group.append(telebot.types.InputMediaAudio(f_id))
                             
                     try:
-                        sent_msgs = rate_limiter.execute(
-                            bot.send_media_group,
+                        sent_msgs = bot.send_media_group(
                             chat_id=storage_chat_id,
                             media=media_group
                         )
                         for sent_msg in sent_msgs:
                             storage_items.append(sent_msg.message_id)
-                    except RateLimitExceeded:
-                        aborted_by_rate_limit = True
-                        break
                     except Exception as e:
                         print(f"Failed to send media group for {mt}: {e}")
                         failed += len(chunk)
@@ -127,17 +119,13 @@ def store_session(user_id, items_data, group_media=False):
                         aborted_by_rate_limit = True
                         break
                     try:
-                        copied_msgs = rate_limiter.execute(
-                            bot.copy_messages,
+                        copied_msgs = bot.copy_messages(
                             chat_id=storage_chat_id,
                             from_chat_id=user_id,
                             message_ids=chunk
                         )
                         for msg_id_obj in copied_msgs:
                             storage_items.append(msg_id_obj.message_id)
-                    except RateLimitExceeded:
-                        aborted_by_rate_limit = True
-                        break
                     except Exception as e:
                         print(f"Failed to copy batch of text/unsupported messages: {e}")
                         failed += len(chunk)
