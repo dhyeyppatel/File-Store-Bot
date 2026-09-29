@@ -35,20 +35,26 @@ def register_handlers(bot):
             else:
                 bot.send_message(message.chat.id, "❌ Invalid or expired link.")
         else:
-            msg = "Welcome to the File Store Bot!\nUse /upload to store files and get a shareable link."
-            if getattr(bot, 'is_main_bot', False):
-                msg += "\n\nYou can also clone this bot using /clone or /mybots."
-            bot.send_message(message.chat.id, msg)
+            msg = "Welcome to the File Store Bot!\nUse the menu below to navigate."
+            is_main = getattr(bot, 'is_main_bot', False)
+            if is_main:
+                msg += "\n\nYou can also manage your bots using /mybots."
+            bot.send_message(
+                message.chat.id, 
+                msg, 
+                reply_markup=keyboards.main_menu_keyboard(is_main)
+            )
 
     # ─────────────────────────────────────────────
     # Bot Cloning logic
     # ─────────────────────────────────────────────
 
     @bot.message_handler(commands=['clone'])
+    @bot.message_handler(func=lambda m: m.text == "🤖 Clone Bot")
     def handle_clone_cmd(message):
         if getattr(bot, 'is_main_bot', False):
             database.set_user_state(message.chat.id, "awaiting_bot_token")
-            bot.send_message(message.chat.id, "🤖 Send me the Bot Token from @BotFather to clone this bot:")
+            bot.send_message(message.chat.id, "🤖 Send me the Bot Token from @BotFather to clone this bot:", reply_markup=keyboards.cancel_keyboard())
         else:
             bot.send_message(message.chat.id, "❌ This command is only available on the main bot.")
             
@@ -87,6 +93,7 @@ def register_handlers(bot):
     # ─────────────────────────────────────────────
 
     @bot.message_handler(commands=['upload'])
+    @bot.message_handler(func=lambda m: m.text == "📤 Upload Files")
     def handle_upload(message):
         upload_session.start_session(message.chat.id)
         user_settings = settings.get_user_settings(message.chat.id)
@@ -100,8 +107,11 @@ def register_handlers(bot):
 
     @bot.message_handler(func=lambda m: m.text == "❌ Cancel")
     def handle_cancel(message):
-        upload_session.delete_session(message.chat.id)
-        bot.send_message(message.chat.id, "❌ Upload cancelled.", reply_markup=keyboards.remove_keyboard())
+        user_id = message.chat.id
+        upload_session.delete_session(user_id)
+        database.set_user_state(user_id, None)
+        is_main = getattr(bot, 'is_main_bot', False)
+        bot.send_message(user_id, "❌ Operation cancelled.", reply_markup=keyboards.main_menu_keyboard(is_main))
 
     @bot.message_handler(func=lambda m: m.text == "✅ Done")
     def handle_done(message):
@@ -124,7 +134,8 @@ def register_handlers(bot):
             bot.send_message(user_id, "⚠️ You haven't sent anything yet.\n\nSend at least one file, then press ✅ Done.")
             return
 
-        bot.send_message(user_id, f"⏳ Storing {len(message_ids)} item(s)...", reply_markup=keyboards.remove_keyboard())
+        is_main = getattr(bot, 'is_main_bot', False)
+        bot.send_message(user_id, f"⏳ Storing {len(message_ids)} item(s)...", reply_markup=keyboards.main_menu_keyboard(is_main))
 
         result = storage.store_session(bot, user_id, message_ids)
         upload_session.delete_session(user_id)
@@ -150,6 +161,7 @@ def register_handlers(bot):
     # ─────────────────────────────────────────────
 
     @bot.message_handler(commands=['settings'])
+    @bot.message_handler(func=lambda m: m.text == "⚙️ Settings")
     def handle_settings(message):
         user_settings = settings.get_user_settings(message.chat.id)
         grouping = user_settings.get("group_media", False)
@@ -189,12 +201,13 @@ def register_handlers(bot):
         return None, None
 
     @bot.message_handler(commands=['batch'])
+    @bot.message_handler(func=lambda m: m.text == "📦 Create Batch")
     def handle_batch(message):
         user_id = message.chat.id
         database.set_user_state(user_id, "batch_first")
         bot.send_message(user_id,
             "Forward the first message from your batch channel (with forward tag), "
-            "or send its link (e.g. https://t.me/c/123456/1).")
+            "or send its link (e.g. https://t.me/c/123456/1).", reply_markup=keyboards.cancel_keyboard())
 
     # ─────────────────────────────────────────────
     # Catch-all — handles file collection during upload + batch states + clone states
@@ -242,14 +255,26 @@ def register_handlers(bot):
                     new_bot.set_webhook(url=webhook_url, secret_token=secret_token)
                 else:
                     new_bot.set_webhook(url=webhook_url)
+                    
+                # Auto-setup commands for the cloned bot
+                from telebot.types import BotCommand
+                commands = [
+                    BotCommand("start", "Start the bot"),
+                    BotCommand("upload", "Start a new file upload session"),
+                    BotCommand("batch", "Create a link from existing channel messages"),
+                    BotCommand("settings", "Configure bot preferences")
+                ]
+                new_bot.set_my_commands(commands)
                 
                 database.add_cloned_bot(user_id, token, bot_info.username)
                 database.set_user_state(user_id, None)
                 
                 bot.edit_message_text(f"✅ Bot cloned successfully!\n\nYour bot is now live at @{bot_info.username}.", user_id, bot_msg.message_id)
+                bot.send_message(user_id, "Use the menu below to navigate:", reply_markup=keyboards.main_menu_keyboard(getattr(bot, 'is_main_bot', False)))
             except Exception as e:
                 bot.edit_message_text(f"❌ Invalid token or error connecting to Telegram: {e}", user_id, bot_msg.message_id)
                 database.set_user_state(user_id, None)
+                bot.send_message(user_id, "Please try again.", reply_markup=keyboards.main_menu_keyboard(getattr(bot, 'is_main_bot', False)))
             return
 
         if state == "batch_first":

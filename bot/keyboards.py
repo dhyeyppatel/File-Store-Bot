@@ -2,8 +2,13 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 import os
 
 def upload_keyboard():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False, row_width=2)
     markup.add(KeyboardButton("✅ Done"), KeyboardButton("❌ Cancel"))
+    return markup
+
+def cancel_keyboard():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    markup.add(KeyboardButton("❌ Cancel"))
     return markup
 
 def remove_keyboard():
@@ -32,4 +37,21 @@ def settings_keyboard(is_grouped):
     markup = InlineKeyboardMarkup()
     btn_text = "Disable Grouping 🔴" if is_grouped else "Enable Grouping 🟢"
     markup.add(InlineKeyboardButton(btn_text, callback_data="toggle_grouping"))
+    return markup
+
+def main_menu_keyboard(is_main_bot=False):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(
+        KeyboardButton("📤 Upload Files"),
+        KeyboardButton("📦 Create Batch")
+    )
+    if is_main_bot:
+        markup.add(
+            KeyboardButton("🤖 Clone Bot"),
+            KeyboardButton("⚙️ Settings")
+        )
+    else:
+        markup.add(
+            KeyboardButton("⚙️ Settings")
+        )
     return markup
