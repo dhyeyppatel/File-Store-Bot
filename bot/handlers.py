@@ -13,7 +13,7 @@ def handle_start(message):
         token = args[1]
         upload_doc = storage.retrieve_upload_by_token(token)
         if upload_doc:
-            item_count = upload_doc['item_count']
+            item_count = upload_doc.get('processed_items', upload_doc.get('item_count', 0))
             bot.send_message(
                 message.chat.id,
                 f"📦 File Collection\n\nItems: {item_count}",
