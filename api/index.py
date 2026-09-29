@@ -25,9 +25,13 @@ class handler(BaseHTTPRequestHandler):
             update = telebot.types.Update.de_json(update_json)
             tg_bot.process_new_updates([update])
         except Exception as e:
-            print(f"Error processing update: {e}")
+            import traceback
+            error_msg = traceback.format_exc()
+            print(f"Error processing update: {error_msg}")
             self.send_response(500)
+            self.send_header('Content-type', 'text/plain')
             self.end_headers()
+            self.wfile.write(f"Webhook Error: {error_msg}".encode('utf-8'))
             return
 
         self.send_response(200)
