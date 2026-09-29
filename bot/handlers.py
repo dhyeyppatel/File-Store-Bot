@@ -61,7 +61,12 @@ def handle_done(message):
     session = upload_session.lock_session(user_id)
     
     if not session:
-        # Already processing or no session
+        # Check if it's already processing (Telegram retry) vs truly no session
+        existing = upload_session.get_session(user_id)
+        if existing and existing.get('status') == 'processing':
+            # This is a Telegram webhook retry — silently ignore it
+            return
+        # Genuinely no session
         bot.send_message(user_id, "⚠️ No active upload session.")
         return
         
@@ -70,16 +75,15 @@ def handle_done(message):
         upload_session.start_session(user_id) # Unlock by recreating
         bot.send_message(user_id, "⚠️ You haven't uploaded anything yet.\n\nSend at least one file or message.")
         return
-        
-    bot.send_message(user_id, f"📦 Preparing your files...\n\nItems received: {len(session.get('items', []))}", reply_markup=keyboards.remove_keyboard())
-    bot.send_message(user_id, "⏳ Large upload detected.\nYour files are being stored in batches.\nPlease wait...")
     
     # Get user setting
     user_settings = settings.get_user_settings(user_id)
     grouping = user_settings.get("group_media", False)
     
+    bot.send_message(user_id, f"📦 Storing {len(items)} item(s)...", reply_markup=keyboards.remove_keyboard())
+    
     # Store session
-    result = storage.store_session(user_id, session.get('items', []), grouping)
+    result = storage.store_session(user_id, items, grouping)
     
     # Clean up session
     upload_session.delete_session(user_id)
@@ -92,7 +96,7 @@ def handle_done(message):
         message_text = f"✅ Upload complete!\n\n📦 Items successfully stored: {count}\n\n🔗 Your secure link:\n{url}"
         
         if failed_count > 0:
-            message_text += f"\n\n⚠️ {failed_count} items failed to store due to Telegram's Strict Rate Limit (Max 20 items per minute for free bots). To store larger batches, please wait 1 minute between uploads."
+            message_text += f"\n\n⚠️ {failed_count} item(s) could not be stored."
             
         bot.send_message(
             user_id,
