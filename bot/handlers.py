@@ -110,7 +110,5 @@ def handle_all_messages(message):
     # Add message to session
     updated_session = upload_session.add_message_to_session(user_id, message.message_id)
     if updated_session:
-        count = len(updated_session.get('message_ids', []))
-        # Simple progress tracking without status message updates, avoiding rate limits
-        if count % 5 == 0 or count == 1:
-            bot.send_message(user_id, f"📥 Received {count} item{'s' if count > 1 else ''}...")
+        # Simply add message to session, no status updates needed per user request
+        pass
