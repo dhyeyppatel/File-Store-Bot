@@ -39,11 +39,17 @@ def register_handlers(bot):
             is_main = getattr(bot, 'is_main_bot', False)
             if is_main:
                 msg += "\n\nYou can also manage your bots using /mybots."
-            bot.send_message(
-                message.chat.id, 
-                msg, 
-                reply_markup=keyboards.main_menu_keyboard(is_main)
-            )
+                
+            inline_kb = keyboards.start_inline_keyboard(is_main)
+            if inline_kb:
+                bot.send_message(message.chat.id, msg, reply_markup=inline_kb)
+                bot.send_message(message.chat.id, "Menu activated 👇", reply_markup=keyboards.main_menu_keyboard(is_main))
+            else:
+                bot.send_message(
+                    message.chat.id, 
+                    msg, 
+                    reply_markup=keyboards.main_menu_keyboard(is_main)
+                )
 
     # ─────────────────────────────────────────────
     # Bot Cloning logic

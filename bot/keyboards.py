@@ -55,3 +55,15 @@ def main_menu_keyboard(is_main_bot=False):
             KeyboardButton("⚙️ Settings")
         )
     return markup
+
+def start_inline_keyboard(is_main_bot=False):
+    if is_main_bot:
+        return None
+        
+    main_bot = os.getenv('BOT_USERNAME')
+    if not main_bot:
+        return None
+        
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🤖 Create Your Own Bot", url=f"https://t.me/{main_bot}?start=clone"))
+    return markup
