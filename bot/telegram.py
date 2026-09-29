@@ -20,4 +20,4 @@ def get_bot():
 bot = get_bot()
 
 # Import handlers here to register them with the bot instance
-import bot.handlers
+from bot import handlers
