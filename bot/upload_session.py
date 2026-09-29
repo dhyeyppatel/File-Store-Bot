@@ -13,7 +13,7 @@ def start_session(user_id):
         {
             "$set": {
                 "status": "uploading",
-                "items": [],
+                "message_ids": [],
                 "started_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc)
             }
@@ -21,12 +21,12 @@ def start_session(user_id):
         upsert=True
     )
 
-def add_item_to_session(user_id, item_data):
+def add_message_to_session(user_id, message_id):
     db = get_db()
     result = db.sessions.find_one_and_update(
         {"user_id": user_id, "status": "uploading"},
         {
-            "$push": {"items": item_data},
+            "$push": {"message_ids": message_id},
             "$set": {"updated_at": datetime.now(timezone.utc)}
         },
         return_document=pymongo.ReturnDocument.AFTER

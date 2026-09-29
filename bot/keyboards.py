@@ -24,8 +24,3 @@ def retrieve_keyboard(token):
     markup.add(InlineKeyboardButton("📥 Send All", callback_data=f"send_all_{token}"))
     return markup
     
-def settings_keyboard(is_grouped):
-    markup = InlineKeyboardMarkup()
-    btn_text = "Disable Grouping 🔴" if is_grouped else "Enable Grouping 🟢"
-    markup.add(InlineKeyboardButton(btn_text, callback_data="toggle_grouping"))
-    return markup
