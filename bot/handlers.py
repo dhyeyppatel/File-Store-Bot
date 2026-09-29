@@ -103,12 +103,16 @@ def handle_all_messages(message):
     # Check if session active
     session = upload_session.get_session(user_id)
     if not session or session.get('status') != 'uploading':
-        # They are not in an upload session, ignore or notify
-        # Let's not spam them if they just type hi, maybe just return
+        return
+        
+    # Check max limits to prevent Vercel/Telegram timeouts during retrieval
+    MAX_ITEMS = 50
+    current_count = len(session.get('message_ids', []))
+    if current_count >= MAX_ITEMS:
+        # Avoid sending the warning multiple times in a row if they upload a large album
+        if current_count == MAX_ITEMS:
+            bot.send_message(user_id, f"⚠️ Maximum limit of {MAX_ITEMS} items reached!\n\nPlease press ✅ Done to finish this collection.")
         return
         
     # Add message to session
-    updated_session = upload_session.add_message_to_session(user_id, message.message_id)
-    if updated_session:
-        # Simply add message to session, no status updates needed per user request
-        pass
+    upload_session.add_message_to_session(user_id, message.message_id)
