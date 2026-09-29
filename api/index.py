@@ -1,6 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 import os
-
+from urllib.parse import urlparse, parse_qs
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -19,8 +19,13 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             import telebot
-            import bot.telegram as tg_module   # import the module, not the name 'bot'
-            tg_bot = tg_module.bot
+            import bot.telegram as tg_module
+            
+            parsed_path = urlparse(self.path)
+            query_params = parse_qs(parsed_path.query)
+            token = query_params.get('token', [None])[0]
+
+            tg_bot = tg_module.get_bot(token)
 
             update = telebot.types.Update.de_json(update_json)
             tg_bot.process_new_updates([update])
@@ -39,9 +44,15 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if 'setup=true' in self.path:
+            import telebot
             from telebot.types import BotCommand
             import bot.telegram as tg_module
-            tg_bot = tg_module.bot
+            
+            parsed_path = urlparse(self.path)
+            query_params = parse_qs(parsed_path.query)
+            token = query_params.get('token', [None])[0]
+
+            tg_bot = tg_module.get_bot(token)
 
             # Prefer BASE_URL env var, fall back to Host header
             base_url = (os.getenv('BASE_URL') or '').rstrip('/')
@@ -49,7 +60,11 @@ class handler(BaseHTTPRequestHandler):
                 host = self.headers.get('Host', '')
                 base_url = f"https://{host}"
 
-            webhook_url = f"{base_url}/api"
+            if token:
+                webhook_url = f"{base_url}/api?token={token}"
+            else:
+                webhook_url = f"{base_url}/api"
+                
             secret_token = os.getenv('WEBHOOK_SECRET')
 
             try:

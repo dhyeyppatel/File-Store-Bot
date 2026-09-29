@@ -10,13 +10,17 @@ def remove_keyboard():
     from telebot.types import ReplyKeyboardRemove
     return ReplyKeyboardRemove()
 
-def share_keyboard(token):
+def share_keyboard(token, bot_username):
     markup = InlineKeyboardMarkup()
-    bot_username = os.getenv('BOT_USERNAME', 'YourBot')
     url = f"https://t.me/{bot_username}?start={token}"
     share_url = f"https://t.me/share/url?url={url}"
     markup.add(InlineKeyboardButton("🔗 Open Files", url=url))
     markup.add(InlineKeyboardButton("📋 Share Link", url=share_url))
+    
+    main_bot = os.getenv('BOT_USERNAME')
+    if main_bot:
+        markup.add(InlineKeyboardButton("🤖 Clone This Bot", url=f"https://t.me/{main_bot}?start=clone"))
+        
     return markup
 
 def retrieve_keyboard(token):

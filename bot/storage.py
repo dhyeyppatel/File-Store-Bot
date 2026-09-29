@@ -2,7 +2,6 @@ import os
 import telebot
 from bot.database import get_db
 from bot.tokens import generate_token, hash_token
-from bot.telegram import bot
 from datetime import datetime, timezone
 
 def chunk_list(lst, n):
@@ -13,7 +12,7 @@ def chunk_list(lst, n):
 # /upload flow
 # ─────────────────────────────────────────────
 
-def store_session(user_id, items_data):
+def store_session(bot, user_id, items_data):
     """
     Copy/group messages into the storage channel and return a shareable token.
 
@@ -152,7 +151,7 @@ def retrieve_upload_by_token(token):
     return db.uploads.find_one({"token_hash": token_hash, "status": "stored"})
 
 
-def send_upload_items(user_id, upload_doc):
+def send_upload_items(bot, user_id, upload_doc):
     """Send stored files to the user using copy_messages."""
     source = upload_doc.get("source_chat_id") or os.getenv('STORAGE_CHAT_ID')
     items = upload_doc.get('items', [])

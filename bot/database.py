@@ -41,3 +41,19 @@ def get_user_state(user_id):
     if user:
         return user.get("state"), user.get("state_data", {})
     return None, {}
+
+def add_cloned_bot(user_id, token, username):
+    db = get_db()
+    db.cloned_bots.update_one(
+        {"token": token},
+        {"$set": {"owner_id": user_id, "username": username, "status": "active"}},
+        upsert=True
+    )
+
+def get_cloned_bots(user_id):
+    db = get_db()
+    return list(db.cloned_bots.find({"owner_id": user_id, "status": "active"}))
+
+def remove_cloned_bot(token):
+    db = get_db()
+    db.cloned_bots.delete_one({"token": token})
