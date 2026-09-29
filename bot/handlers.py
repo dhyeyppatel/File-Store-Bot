@@ -111,14 +111,5 @@ def handle_all_messages(message):
     if not session or session.get('status') != 'uploading':
         return
         
-    # Check max limits to prevent Vercel/Telegram timeouts during retrieval
-    MAX_ITEMS = 50
-    current_count = len(session.get('message_ids', []))
-    if current_count >= MAX_ITEMS:
-        # Avoid sending the warning multiple times in a row if they upload a large album
-        if current_count == MAX_ITEMS:
-            bot.send_message(user_id, f"⚠️ Maximum limit of {MAX_ITEMS} items reached!\n\nPlease press ✅ Done to finish this collection.")
-        return
-        
     # Add message to session
     upload_session.add_message_to_session(user_id, message.message_id)
