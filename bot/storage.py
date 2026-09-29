@@ -168,6 +168,7 @@ def store_batch_session(user_id, message_ids):
     upload_doc = {
         "upload_id": upload_id,
         "owner_id": user_id,
+        "token_hash": token_hash,
         "status": "stored",
         "total_items": len(message_ids),
         "processed_items": len(message_ids),
