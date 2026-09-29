@@ -151,8 +151,76 @@ def extract_media_info(message):
         return 'text', None
     return 'other', None
 
+import re
+
+def extract_msg_id(message):
+    if message.forward_from_message_id:
+        return message.forward_from_message_id
+    elif message.text:
+        match = re.search(r'/(\d+)/?$', message.text.strip())
+        if match:
+            return int(match.group(1))
+    return None
+
+from bot import database
+
+@bot.message_handler(commands=['batch'])
+def handle_batch(message):
+    user_id = message.chat.id
+    database.set_user_state(user_id, "batch_first")
+    bot.send_message(
+        user_id,
+        "Forward The Batch First Message From your Batch Channel (With Forward Tag).. or Give Me Batch First Message link from your batch channel"
+    )
+
 @bot.message_handler(content_types=['audio', 'document', 'photo', 'sticker', 'video', 'video_note', 'voice', 'location', 'contact', 'text', 'animation', 'poll', 'dice'])
 def handle_all_messages(message):
+    user_id = message.chat.id
+    
+    # Check for batch states first
+    state, state_data = database.get_user_state(user_id)
+    if state == "batch_first":
+        msg_id = extract_msg_id(message)
+        if not msg_id:
+            bot.send_message(user_id, "❌ Please provide a valid forwarded message or link.")
+            return
+        database.set_user_state(user_id, "batch_last", {"first_id": msg_id})
+        bot.send_message(
+            user_id,
+            "Forward The Batch Last Message From Your Batch Channel (With Forward Tag).. or  Give Me Batch last message link from your batch channel"
+        )
+        return
+    elif state == "batch_last":
+        msg_id = extract_msg_id(message)
+        if not msg_id:
+            bot.send_message(user_id, "❌ Please provide a valid forwarded message or link.")
+            return
+            
+        first_id = state_data.get('first_id')
+        last_id = msg_id
+        
+        if first_id > last_id:
+            first_id, last_id = last_id, first_id
+            
+        ids = list(range(first_id, last_id + 1))
+        
+        # Protect against massive ranges
+        if len(ids) > 1000:
+            bot.send_message(user_id, "❌ Range is too large. Maximum 1000 items per batch.")
+            return
+            
+        token, count = storage.store_batch_session(user_id, ids)
+        database.set_user_state(user_id, None)
+        
+        bot_username = os.getenv('BOT_USERNAME', 'YourBot')
+        url = f"https://t.me/{bot_username}?start={token}"
+        bot.send_message(
+            user_id, 
+            f"✅ Batch created!\n\n📦 Items: {count}\n\n🔗 Your secure link:\n{url}",
+            reply_markup=keyboards.share_keyboard(token)
+        )
+        return
+
     if message.text in ["✅ Done", "❌ Cancel"]:
         return # Handled by specific handlers
     

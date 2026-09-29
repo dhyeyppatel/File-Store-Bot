@@ -26,3 +26,18 @@ db_instance = Database()
 
 def get_db():
     return db_instance.get_db()
+
+def set_user_state(user_id, state, data=None):
+    db = get_db()
+    db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"state": state, "state_data": data or {}}},
+        upsert=True
+    )
+
+def get_user_state(user_id):
+    db = get_db()
+    user = db.users.find_one({"user_id": user_id})
+    if user:
+        return user.get("state"), user.get("state_data", {})
+    return None, {}

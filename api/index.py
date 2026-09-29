@@ -63,6 +63,7 @@ class handler(BaseHTTPRequestHandler):
                 commands = [
                     BotCommand("start", "Start the bot"),
                     BotCommand("upload", "Start a new file upload session"),
+                    BotCommand("batch", "Create a link from existing channel messages"),
                     BotCommand("settings", "Configure bot preferences")
                 ]
                 tg_bot.set_my_commands(commands)

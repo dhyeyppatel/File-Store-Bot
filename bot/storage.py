@@ -158,3 +158,22 @@ def send_upload_items(user_id, upload_doc):
             )
         except Exception as e:
             print(f"Failed to retrieve batch for user {user_id}: {e}")
+
+def store_batch_session(user_id, message_ids):
+    db = get_db()
+    upload_id = "up_" + os.urandom(8).hex()
+    raw_token = generate_token()
+    token_hash = hash_token(raw_token)
+    
+    upload_doc = {
+        "upload_id": upload_id,
+        "owner_id": user_id,
+        "status": "stored",
+        "total_items": len(message_ids),
+        "processed_items": len(message_ids),
+        "failed_items": 0,
+        "items": message_ids,
+        "created_at": datetime.now(timezone.utc)
+    }
+    db.uploads.insert_one(upload_doc)
+    return raw_token, len(message_ids)
