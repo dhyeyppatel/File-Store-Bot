@@ -146,7 +146,7 @@ def retrieve_upload_by_token(token):
     return db.uploads.find_one({"token_hash": token_hash, "status": "stored"})
 
 def send_upload_items(user_id, upload_doc):
-    storage_chat_id = os.getenv('STORAGE_CHAT_ID')
+    storage_chat_id = upload_doc.get("source_chat_id") or os.getenv('STORAGE_CHAT_ID')
     
     # Retrieve using copy_messages to efficiently send them grouped natively
     for chunk in chunk_list(upload_doc['items'], 100):
@@ -159,7 +159,7 @@ def send_upload_items(user_id, upload_doc):
         except Exception as e:
             print(f"Failed to retrieve batch for user {user_id}: {e}")
 
-def store_batch_session(user_id, message_ids):
+def store_batch_session(user_id, message_ids, source_chat_id=None):
     db = get_db()
     upload_id = "up_" + os.urandom(8).hex()
     raw_token = generate_token()
@@ -169,6 +169,7 @@ def store_batch_session(user_id, message_ids):
         "upload_id": upload_id,
         "owner_id": user_id,
         "token_hash": token_hash,
+        "source_chat_id": source_chat_id,
         "status": "stored",
         "total_items": len(message_ids),
         "processed_items": len(message_ids),

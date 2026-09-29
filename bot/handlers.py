@@ -153,14 +153,20 @@ def extract_media_info(message):
 
 import re
 
-def extract_msg_id(message):
-    if message.forward_from_message_id:
-        return message.forward_from_message_id
+def extract_batch_info(message):
+    if message.forward_from_chat:
+        return message.forward_from_message_id, message.forward_from_chat.id
     elif message.text:
-        match = re.search(r'/(\d+)/?$', message.text.strip())
+        match = re.search(r't\.me/(?:c/)?([^/]+)/(\d+)', message.text.strip())
         if match:
-            return int(match.group(1))
-    return None
+            chat_str = match.group(1)
+            msg_id = int(match.group(2))
+            if chat_str.isdigit():
+                chat_id = int("-100" + chat_str)
+            else:
+                chat_id = "@" + chat_str
+            return msg_id, chat_id
+    return None, None
 
 from bot import database
 
@@ -180,24 +186,36 @@ def handle_all_messages(message):
     # Check for batch states first
     state, state_data = database.get_user_state(user_id)
     if state == "batch_first":
-        msg_id = extract_msg_id(message)
-        if not msg_id:
-            bot.send_message(user_id, "❌ Please provide a valid forwarded message or link.")
+        msg_id, chat_id = extract_batch_info(message)
+        if not msg_id or not chat_id:
+            bot.send_message(user_id, "❌ Please provide a valid forwarded message or link from a channel.")
             return
-        database.set_user_state(user_id, "batch_last", {"first_id": msg_id})
+            
+        try:
+            bot.get_chat(chat_id)
+        except Exception:
+            bot.send_message(user_id, "❌ I cannot access this channel. Make sure I am added as an Admin there!")
+            return
+            
+        database.set_user_state(user_id, "batch_last", {"first_id": msg_id, "chat_id": chat_id})
         bot.send_message(
             user_id,
             "Forward The Batch Last Message From Your Batch Channel (With Forward Tag).. or  Give Me Batch last message link from your batch channel"
         )
         return
     elif state == "batch_last":
-        msg_id = extract_msg_id(message)
-        if not msg_id:
-            bot.send_message(user_id, "❌ Please provide a valid forwarded message or link.")
+        msg_id, chat_id = extract_batch_info(message)
+        if not msg_id or not chat_id:
+            bot.send_message(user_id, "❌ Please provide a valid forwarded message or link from a channel.")
             return
             
         first_id = state_data.get('first_id')
+        first_chat_id = state_data.get('chat_id')
         last_id = msg_id
+        
+        if chat_id != first_chat_id:
+            bot.send_message(user_id, "❌ The first and last messages must be from the same channel.")
+            return
         
         if first_id > last_id:
             first_id, last_id = last_id, first_id
@@ -209,7 +227,7 @@ def handle_all_messages(message):
             bot.send_message(user_id, "❌ Range is too large. Maximum 1000 items per batch.")
             return
             
-        token, count = storage.store_batch_session(user_id, ids)
+        token, count = storage.store_batch_session(user_id, ids, source_chat_id=chat_id)
         database.set_user_state(user_id, None)
         
         bot_username = os.getenv('BOT_USERNAME', 'YourBot')
