@@ -38,6 +38,8 @@ def store_session(user_id, items_data, group_media=False):
         if not group_media:
             # Process using highly efficient copy_messages (100 items per request)
             message_ids = [item['message_id'] if isinstance(item, dict) else item for item in items_data]
+            message_ids.sort() # Telegram API requires strictly increasing order
+            
             for chunk in chunk_list(message_ids, 100):
                 if aborted_by_rate_limit:
                     break
@@ -105,6 +107,7 @@ def store_session(user_id, items_data, group_media=False):
                         
             # Send unsupported formats natively using chunked copy_messages
             if not aborted_by_rate_limit:
+                others.sort() # Telegram API requires strictly increasing order
                 for chunk in chunk_list(others, 100):
                     if aborted_by_rate_limit:
                         break
