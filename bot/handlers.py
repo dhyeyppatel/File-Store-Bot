@@ -82,16 +82,22 @@ def handle_done(message):
     upload_session.delete_session(user_id)
     
     if result:
-        token, count = result
+        token, count, failed_count = result
         bot_username = os.getenv('BOT_USERNAME', 'YourBot')
         url = f"https://t.me/{bot_username}?start={token}"
+        
+        message_text = f"✅ Upload complete!\n\n📦 Items successfully stored: {count}\n\n🔗 Your secure link:\n{url}"
+        
+        if failed_count > 0:
+            message_text += f"\n\n⚠️ {failed_count} items failed to store due to Telegram's Strict Rate Limit (Max 20 items per minute for free bots). To store larger batches, please wait 1 minute between uploads."
+            
         bot.send_message(
             user_id,
-            f"✅ Upload complete!\n\n📦 Items: {count}\n\n🔗 Your secure link:\n{url}",
+            message_text,
             reply_markup=keyboards.share_keyboard(token)
         )
     else:
-        bot.send_message(user_id, "❌ Failed to store items.")
+        bot.send_message(user_id, "❌ Failed to store items. Telegram might have blocked the bot temporarily. Please try again later.")
 
 @bot.message_handler(content_types=['audio', 'document', 'photo', 'sticker', 'video', 'video_note', 'voice', 'location', 'contact', 'text', 'animation', 'poll', 'dice'])
 def handle_all_messages(message):

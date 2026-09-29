@@ -8,7 +8,7 @@ def store_session(user_id, message_ids):
     storage_chat_id = os.getenv('STORAGE_CHAT_ID')
     
     storage_message_ids = []
-    # Copy each message to storage channel
+    failed_count = 0
     for msg_id in message_ids:
         try:
             copied_msg = bot.copy_message(
@@ -19,6 +19,7 @@ def store_session(user_id, message_ids):
             storage_message_ids.append(copied_msg.message_id)
         except Exception as e:
             print(f"Failed to copy message {msg_id}: {e}")
+            failed_count += 1
             continue
 
     if not storage_message_ids:
@@ -39,7 +40,7 @@ def store_session(user_id, message_ids):
     }
     
     db.uploads.insert_one(upload_doc)
-    return raw_token, len(storage_message_ids)
+    return raw_token, len(storage_message_ids), failed_count
 
 def retrieve_upload_by_token(token):
     token_hash = hash_token(token)
