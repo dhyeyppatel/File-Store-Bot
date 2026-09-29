@@ -36,22 +36,26 @@ def store_session(user_id, items_data, group_media=False):
     
     try:
         if not group_media:
-            # Process individually
-            for item in items_data:
+            # Process using highly efficient copy_messages (100 items per request)
+            message_ids = [item['message_id'] for item in items_data]
+            for chunk in chunk_list(message_ids, 100):
+                if aborted_by_rate_limit:
+                    break
                 try:
-                    copied_msg = rate_limiter.execute(
-                        bot.copy_message,
+                    copied_msgs = rate_limiter.execute(
+                        bot.copy_messages,
                         chat_id=storage_chat_id,
                         from_chat_id=user_id,
-                        message_id=item['message_id']
+                        message_ids=chunk
                     )
-                    storage_items.append(copied_msg.message_id)
+                    for msg_id_obj in copied_msgs:
+                        storage_items.append(msg_id_obj.message_id)
                 except RateLimitExceeded:
                     aborted_by_rate_limit = True
                     break
                 except Exception as e:
-                    print(f"Failed to copy message {item['message_id']}: {e}")
-                    failed += 1
+                    print(f"Failed to copy batch of messages: {e}")
+                    failed += len(chunk)
         else:
             # Process with grouping (order doesn't matter)
             groups = {}
@@ -96,23 +100,26 @@ def store_session(user_id, items_data, group_media=False):
                         print(f"Failed to send media group for {mt}: {e}")
                         failed += len(chunk)
                         
-            # Send unsupported formats individually
+            # Send unsupported formats natively using chunked copy_messages
             if not aborted_by_rate_limit:
-                for msg_id in others:
+                for chunk in chunk_list(others, 100):
+                    if aborted_by_rate_limit:
+                        break
                     try:
-                        copied_msg = rate_limiter.execute(
-                            bot.copy_message,
+                        copied_msgs = rate_limiter.execute(
+                            bot.copy_messages,
                             chat_id=storage_chat_id,
                             from_chat_id=user_id,
-                            message_id=msg_id
+                            message_ids=chunk
                         )
-                        storage_items.append(copied_msg.message_id)
+                        for msg_id_obj in copied_msgs:
+                            storage_items.append(msg_id_obj.message_id)
                     except RateLimitExceeded:
                         aborted_by_rate_limit = True
                         break
                     except Exception as e:
-                        print(f"Failed to copy message {msg_id}: {e}")
-                        failed += 1
+                        print(f"Failed to copy batch of text/unsupported messages: {e}")
+                        failed += len(chunk)
     finally:
         # Save what we managed to process before rate limit or timeout
         if aborted_by_rate_limit:
