@@ -173,7 +173,7 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
@@ -227,6 +227,49 @@ def register_handlers(bot):
             database.set_user_state(call.message.chat.id, "awaiting_db_channel", {"bot_id": bot_id})
             bot.send_message(call.message.chat.id, "Send the Database/Storage Channel ID (e.g. -100123456789) where this bot should store files.\n\n⚠️ Ensure your clone bot is an admin in that channel!", reply_markup=keyboards.cancel_keyboard())
             bot.answer_callback_query(call.id)
+            
+        elif action == 'token':
+            database.set_user_state(call.message.chat.id, "awaiting_new_token", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the new Bot Token from @BotFather to update this bot:", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'delete':
+            bot.send_message(call.message.chat.id, "⚠️ Are you sure you want to completely delete this clone bot? This action cannot be undone.", reply_markup=keyboards.confirm_delete_keyboard(bot_id))
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'confirmdel':
+            database.delete_cloned_bot_by_id(bot_id)
+            bot.edit_message_text("✅ Clone bot has been successfully deleted.", call.message.chat.id, call.message.message_id)
+            bot.answer_callback_query(call.id, "Bot Deleted")
+            
+        elif action == 'cancel':
+            bot.edit_message_text("Customize Clone Settings:", call.message.chat.id, call.message.message_id, reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.answer_callback_query(call.id, "Cancelled")
+            
+        elif action == 'restart':
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                import os
+                import telebot
+                token = selected_bot['token']
+                base_url = (os.getenv('BASE_URL') or '').rstrip('/')
+                if not base_url:
+                    base_url = f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL', '')}"
+                
+                if base_url and '://' in base_url:
+                    try:
+                        new_bot = telebot.TeleBot(token)
+                        webhook_url = f"{base_url}/api?token={token}"
+                        secret_token = os.getenv('WEBHOOK_SECRET')
+                        if secret_token:
+                            new_bot.set_webhook(url=webhook_url, secret_token=secret_token)
+                        else:
+                            new_bot.set_webhook(url=webhook_url)
+                        bot.answer_callback_query(call.id, "✅ Bot Restarted Successfully!", show_alert=True)
+                    except Exception as e:
+                        bot.answer_callback_query(call.id, f"❌ Failed to restart: {e}", show_alert=True)
+                else:
+                    bot.answer_callback_query(call.id, "❌ BASE_URL not configured.", show_alert=True)
 
     # ─────────────────────────────────────────────
     # Send all files when user clicks the button
@@ -572,6 +615,11 @@ def register_handlers(bot):
                 return
             token = message.text.strip()
             
+            if database.is_bot_cloned(token):
+                bot.send_message(user_id, "❌ This bot token is already cloned!")
+                database.set_user_state(user_id, None)
+                return
+            
             bot_msg = bot.send_message(user_id, "⏳ Verifying bot token...")
             
             try:
@@ -614,6 +662,56 @@ def register_handlers(bot):
                 bot.edit_message_text(f"❌ Invalid token or error connecting to Telegram: {e}", user_id, bot_msg.message_id)
                 database.set_user_state(user_id, None)
                 bot.send_message(user_id, "Please try again.", reply_markup=keyboards.main_menu_keyboard(getattr(bot, 'is_main_bot', False)))
+            return
+            
+        if state == "awaiting_new_token":
+            if not message.text:
+                return
+            new_token = message.text.strip()
+            
+            if database.is_bot_cloned(new_token):
+                bot.send_message(user_id, "❌ This bot token is already cloned!")
+                database.set_user_state(user_id, None)
+                return
+                
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if not selected_bot:
+                return
+                
+            bot_msg = bot.send_message(user_id, "⏳ Verifying new bot token...")
+            
+            try:
+                import telebot
+                import os
+                new_bot = telebot.TeleBot(new_token)
+                bot_info = new_bot.get_me()
+                
+                base_url = (os.getenv('BASE_URL') or '').rstrip('/')
+                if not base_url:
+                    base_url = f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL', '')}"
+                
+                if not base_url or '://' not in base_url:
+                    bot.edit_message_text("❌ Server missing BASE_URL. Cannot set webhook.", user_id, bot_msg.message_id)
+                    return
+                    
+                webhook_url = f"{base_url}/api?token={new_token}"
+                secret_token = os.getenv('WEBHOOK_SECRET')
+                if secret_token:
+                    new_bot.set_webhook(url=webhook_url, secret_token=secret_token)
+                else:
+                    new_bot.set_webhook(url=webhook_url)
+                    
+                # Update DB
+                database.update_cloned_bot_token(bot_id, new_token, bot_info.username)
+                database.set_user_state(user_id, None)
+                
+                bot.edit_message_text(f"✅ Token updated successfully!\n\nYour bot is now live at @{bot_info.username}.", user_id, bot_msg.message_id)
+                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            except Exception as e:
+                bot.edit_message_text(f"❌ Invalid token or error connecting to Telegram: {e}", user_id, bot_msg.message_id)
+                database.set_user_state(user_id, None)
+                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
 
         if state == "batch_first":

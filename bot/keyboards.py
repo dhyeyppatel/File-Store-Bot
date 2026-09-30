@@ -117,3 +117,11 @@ def force_sub_select_keyboard():
     markup.row(channel_btn, group_btn)
     markup.row(KeyboardButton("❌ Cancel"))
     return markup
+
+def confirm_delete_keyboard(bot_id):
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("✅ YES, DELETE", callback_data=f"clone_confirmdel_{bot_id}"),
+        InlineKeyboardButton("❌ NO, CANCEL", callback_data=f"clone_cancel_{bot_id}")
+    )
+    return markup
