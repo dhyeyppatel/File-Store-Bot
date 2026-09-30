@@ -25,7 +25,7 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 2. **Install dependencies**: `pip install -r requirements.txt`
 3. **Configure Environment Variables**: Copy `.env.example` to `.env` and fill in the values.
 4. **Deploy to Vercel**: Import this project into Vercel and set your environment variables.
-5. **Set Webhook**: Set your bot's webhook to `https://your-vercel-domain.vercel.app/api/webhook`.
+5. **Set Webhook**: Just visit `https://your-vercel-domain.vercel.app/api?setup=true` in your browser. This will automatically configure the Telegram webhook and register all bot commands.
 
 ### Environment Variables
 
