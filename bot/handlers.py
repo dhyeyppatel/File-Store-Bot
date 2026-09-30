@@ -666,7 +666,12 @@ def register_handlers(bot):
         # Group matching items by bot_username and source_chat
         bot_groups = {}
         for doc in results:
-            bot_username = doc.get("bot_username", bot.get_me().username)
+            bot_username = doc.get("bot_username")
+            if not bot_username:
+                if not hasattr(bot, 'bot_username'):
+                    bot.bot_username = bot.get_me().username
+                bot_username = bot.bot_username
+                
             source_chat = doc.get("source_chat_id")
             
             matched_items = []
