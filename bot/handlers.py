@@ -389,7 +389,7 @@ def register_handlers(bot):
                 token = selected_bot['token']
                 base_url = (os.getenv('BASE_URL') or '').rstrip('/')
                 
-                # Check if it was provided
+                # Check if BASE_URL is provided
                 if not base_url or len(base_url) < 10:
                     bot.answer_callback_query(call.id, "❌ BASE_URL environment variable is missing in Vercel!", show_alert=True)
                     return
@@ -397,13 +397,16 @@ def register_handlers(bot):
                 if base_url and '://' in base_url:
                     try:
                         new_bot = telebot.TeleBot(token)
+                        # Step 1: Delete old webhook to clear any stale secret mismatch
+                        new_bot.delete_webhook(drop_pending_updates=True)
+                        # Step 2: Re-register with current BASE_URL + WEBHOOK_SECRET
                         webhook_url = f"{base_url}/api?token={token}"
                         secret_token = os.getenv('WEBHOOK_SECRET')
                         if secret_token:
                             new_bot.set_webhook(url=webhook_url, secret_token=secret_token)
                         else:
                             new_bot.set_webhook(url=webhook_url)
-                        bot.answer_callback_query(call.id, "✅ Bot Restarted Successfully!", show_alert=True)
+                        bot.answer_callback_query(call.id, "✅ Webhook re-registered! Bot is working now.", show_alert=True)
                     except Exception as e:
                         bot.answer_callback_query(call.id, f"❌ Failed to restart: {e}", show_alert=True)
                 else:
