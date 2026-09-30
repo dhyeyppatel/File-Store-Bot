@@ -92,13 +92,25 @@ def register_handlers(bot):
                 return
                 
             if token.startswith('verify_'):
-                original_token = token.replace('verify_', '')
-                if not getattr(bot, 'is_main_bot', False):
-                    clone_info = database.get_cloned_bot_by_token(bot.token)
-                    if clone_info:
-                        val = clone_info.get("shortener_validity", 24)
-                        database.set_user_verified(message.chat.id, bot.token, val)
-                        bot.send_message(message.chat.id, "✅ You have been successfully verified!")
+                parts = token.split('_', 2)
+                
+                # Format: verify_USERID_FILETOKEN
+                if len(parts) == 3:
+                    target_user = parts[1]
+                    original_token = parts[2]
+                    
+                    if str(message.chat.id) == target_user:
+                        if not getattr(bot, 'is_main_bot', False):
+                            clone_info = database.get_cloned_bot_by_token(bot.token)
+                            if clone_info:
+                                val = clone_info.get("shortener_validity", 24)
+                                database.set_user_verified(message.chat.id, bot.token, val)
+                                bot.send_message(message.chat.id, "✅ You have been successfully verified!")
+                    else:
+                        bot.send_message(message.chat.id, "❌ This verification link is invalid or belongs to another user.")
+                else:
+                    original_token = parts[1]
+                    
                 token = original_token
                 
             upload_doc = storage.retrieve_upload_by_token(token)
@@ -113,7 +125,7 @@ def register_handlers(bot):
                             if api_url and api_key:
                                 import requests
                                 import urllib.parse
-                                dest_url = f"https://t.me/{bot.get_me().username}?start=verify_{token}"
+                                dest_url = f"https://t.me/{bot.get_me().username}?start=verify_{message.chat.id}_{token}"
                                 try:
                                     res = requests.get(f"{api_url}?api={api_key}&url={urllib.parse.quote(dest_url)}").json()
                                     short_url = res.get("shortenedUrl")
