@@ -155,6 +155,7 @@ def register_handlers(bot):
                 bot.send_message(message.chat.id, "❌ Invalid or expired link.")
         else:
             is_main = getattr(bot, 'is_main_bot', False)
+            msg = None
             if not is_main:
                 clone_info = database.get_cloned_bot_by_token(bot.token)
                 msg = clone_info.get("start_message") if clone_info else None
