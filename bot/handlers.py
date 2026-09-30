@@ -388,8 +388,11 @@ def register_handlers(bot):
             if selected_bot:
                 token = selected_bot['token']
                 base_url = (os.getenv('BASE_URL') or '').rstrip('/')
-                if not base_url:
-                    base_url = f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL', '')}"
+                
+                # Check if it was provided
+                if not base_url or len(base_url) < 10:
+                    bot.answer_callback_query(call.id, "❌ BASE_URL environment variable is missing in Vercel!", show_alert=True)
+                    return
                 
                 if base_url and '://' in base_url:
                     try:
