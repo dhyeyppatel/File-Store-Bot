@@ -12,7 +12,7 @@ def chunk_list(lst, n):
 # /upload flow
 # ─────────────────────────────────────────────
 
-def store_session(bot, user_id, items_data):
+def store_session(bot, user_id, items_data, password=None, stars=None):
     """
     Copy/group messages into the storage channel and return a shareable token.
 
@@ -133,7 +133,9 @@ def store_session(bot, user_id, items_data):
         "created_at": datetime.now(timezone.utc),
         "search_text": search_text,
         "bot_username": bot.bot_username,
-        "raw_token": raw_token
+        "raw_token": raw_token,
+        "password": password,
+        "stars": stars
     })
 
     return raw_token, len(storage_message_ids), failed
@@ -143,7 +145,7 @@ def store_session(bot, user_id, items_data):
 # /batch flow  (no actual copying — stores range directly)
 # ─────────────────────────────────────────────
 
-def store_batch_session(user_id, message_ids, source_chat_id=None):
+def store_batch_session(user_id, message_ids, source_chat_id=None, password=None, stars=None):
     """Store a range of message IDs from a channel directly (no copying needed)."""
     db = get_db()
     raw_token = generate_token()
@@ -157,6 +159,8 @@ def store_batch_session(user_id, message_ids, source_chat_id=None):
         "source_chat_id": source_chat_id,
         "item_count": len(message_ids),
         "created_at": datetime.now(timezone.utc),
+        "password": password,
+        "stars": stars
     })
 
     return raw_token, len(message_ids)

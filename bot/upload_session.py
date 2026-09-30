@@ -6,7 +6,7 @@ def get_session(user_id):
     db = get_db()
     return db.sessions.find_one({"user_id": user_id})
 
-def start_session(user_id):
+def start_session(user_id, password=None, stars=None):
     db = get_db()
     db.sessions.update_one(
         {"user_id": user_id},
@@ -15,6 +15,8 @@ def start_session(user_id):
             "status": "uploading",
             "message_ids": [],
             "started_at": datetime.now(timezone.utc),
+            "password": password,
+            "stars": stars
         }},
         upsert=True
     )

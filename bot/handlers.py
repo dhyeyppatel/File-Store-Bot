@@ -144,6 +144,27 @@ def register_handlers(bot):
                                         reply_markup=keyboards.shortener_verify_keyboard(short_url, tutorial)
                                     )
                                     return
+                                    
+                req_password = upload_doc.get("password")
+                if req_password:
+                    database.set_user_state(message.chat.id, "awaiting_file_password", {"token": token, "password": req_password})
+                    bot.send_message(message.chat.id, "🔒 This file is password protected. Please send the password:")
+                    return
+                    
+                req_stars = upload_doc.get("stars")
+                paid_users = upload_doc.get("paid_users", [])
+                if req_stars and message.chat.id not in paid_users:
+                    prices = [telebot.types.LabeledPrice(label="File Access", amount=req_stars)]
+                    bot.send_invoice(
+                        message.chat.id,
+                        title="Premium File Access",
+                        description="Pay Telegram Stars to unlock this file batch.",
+                        invoice_payload=f"unlock_{token}",
+                        provider_token="",
+                        currency="XTR",
+                        prices=prices
+                    )
+                    return
 
                 count = upload_doc.get('item_count', len(upload_doc.get('items', [])))
                 bot.send_message(
@@ -501,19 +522,45 @@ def register_handlers(bot):
     # /upload
     # ─────────────────────────────────────────────
 
-    @bot.message_handler(commands=['upload'])
+    @bot.message_handler(commands=['upload', 'pupload', 'supload'])
     @bot.message_handler(func=lambda m: m.text == "📤 Upload Files")
     def handle_upload(message):
         if not check_permissions(bot, message, "upload"):
             return
             
-        upload_session.start_session(message.chat.id)
-        user_settings = settings.get_user_settings(message.chat.id)
+        user_id = message.chat.id
+        password = None
+        stars = None
+        
+        if message.text:
+            if message.text.startswith('/pupload'):
+                parts = message.text.split(' ', 1)
+                if len(parts) > 1:
+                    password = parts[1].strip()
+                else:
+                    bot.send_message(user_id, "❌ Usage: `/pupload <password>`\nExample: `/pupload secret123`", parse_mode="Markdown")
+                    return
+            elif message.text.startswith('/supload'):
+                parts = message.text.split(' ', 1)
+                if len(parts) > 1 and parts[1].strip().isdigit():
+                    stars = int(parts[1].strip())
+                else:
+                    bot.send_message(user_id, "❌ Usage: `/supload <price_in_stars>`\nExample: `/supload 50`", parse_mode="Markdown")
+                    return
+                    
+        upload_session.start_session(user_id, password=password, stars=stars)
+        user_settings = settings.get_user_settings(user_id)
         grouping = user_settings.get("group_media", False)
         limit_note = "" if grouping else "\n\n⚠️ Group Media is OFF — max 20 items. Use /settings to increase."
+        
+        mode_text = ""
+        if password: mode_text += f"\n🔒 Password protected: `{password}`"
+        if stars: mode_text += f"\n⭐ Premium: `{stars} Stars`"
+        
         bot.send_message(
-            message.chat.id,
-            f"📤 Upload Mode\n\nSend me any files or messages you want to store.\nWhen finished, press ✅ Done.{limit_note}",
+            user_id,
+            f"📤 Upload Mode{mode_text}\n\nSend me any files or messages you want to store.\nWhen finished, press ✅ Done.{limit_note}",
+            parse_mode="Markdown",
             reply_markup=keyboards.upload_keyboard()
         )
 
@@ -560,7 +607,9 @@ def register_handlers(bot):
         is_main = getattr(bot, 'is_main_bot', False)
         bot.send_message(user_id, f"⏳ Storing {len(message_ids)} item(s)...", reply_markup=keyboards.remove_keyboard())
 
-        result = storage.store_session(bot, user_id, message_ids)
+        password = session.get('password')
+        stars = session.get('stars')
+        result = storage.store_session(bot, user_id, message_ids, password=password, stars=stars)
         upload_session.delete_session(user_id)
 
         if result:
@@ -747,14 +796,34 @@ def register_handlers(bot):
                 return msg_id, chat_id
         return None, None
 
-    @bot.message_handler(commands=['batch'])
+    @bot.message_handler(commands=['batch', 'pbatch', 'sbatch'])
     @bot.message_handler(func=lambda m: m.text == "📦 Create Batch")
     def handle_batch(message):
         if not check_permissions(bot, message, "upload"):
             return
             
         user_id = message.chat.id
-        database.set_user_state(user_id, "batch_first")
+        
+        password = None
+        stars = None
+        
+        if message.text:
+            if message.text.startswith('/pbatch'):
+                parts = message.text.split(' ', 1)
+                if len(parts) > 1:
+                    password = parts[1].strip()
+                else:
+                    bot.send_message(user_id, "❌ Usage: `/pbatch <password>`\nExample: `/pbatch secret123`", parse_mode="Markdown")
+                    return
+            elif message.text.startswith('/sbatch'):
+                parts = message.text.split(' ', 1)
+                if len(parts) > 1 and parts[1].strip().isdigit():
+                    stars = int(parts[1].strip())
+                else:
+                    bot.send_message(user_id, "❌ Usage: `/sbatch <price_in_stars>`\nExample: `/sbatch 50`", parse_mode="Markdown")
+                    return
+                
+        database.set_user_state(user_id, "batch_first", {"password": password, "stars": stars})
         bot.send_message(user_id,
             "Forward the first message from your batch channel (with forward tag), "
             "or send its link (e.g. https://t.me/c/123456/1).", reply_markup=keyboards.cancel_keyboard())
@@ -783,6 +852,26 @@ def register_handlers(bot):
         # ── State machine ──
         state, state_data = database.get_user_state(user_id)
         
+        if state == "awaiting_file_password":
+            if not message.text:
+                return
+            expected = state_data.get('password')
+            token = state_data.get('token')
+            
+            if message.text.strip() == expected:
+                database.set_user_state(user_id, None)
+                upload_doc = storage.retrieve_upload_by_token(token)
+                if upload_doc:
+                    count = upload_doc.get('item_count', len(upload_doc.get('items', [])))
+                    bot.send_message(
+                        message.chat.id,
+                        f"✅ Password correct!\n\n📦 File Collection\n\nItems: {count}",
+                        reply_markup=keyboards.retrieve_keyboard(token)
+                    )
+            else:
+                bot.send_message(message.chat.id, "❌ Incorrect password. Please try again:")
+            return
+            
         if state == "awaiting_start_msg":
             if not message.text:
                 return
@@ -1071,7 +1160,11 @@ def register_handlers(bot):
             if len(ids) > 1000:
                 bot.send_message(user_id, "❌ Range too large. Maximum 1000 messages per batch.")
                 return
-            token, count = storage.store_batch_session(user_id, ids, source_chat_id=chat_id)
+            
+            password = state_data.get('password')
+            stars = state_data.get('stars')
+            
+            token, count = storage.store_batch_session(user_id, ids, source_chat_id=chat_id, password=password, stars=stars)
             database.set_user_state(user_id, None)
             
             if not getattr(bot, 'is_main_bot', False):
@@ -1152,3 +1245,33 @@ def register_handlers(bot):
             "file_id": fid,
             "text": search_text
         })
+
+    # ─────────────────────────────────────────────
+    # Telegram Stars Payments
+    # ─────────────────────────────────────────────
+    
+    @bot.pre_checkout_query_handler(func=lambda query: True)
+    def handle_pre_checkout_query(pre_checkout_query):
+        bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+        
+    @bot.message_handler(content_types=['successful_payment'])
+    def handle_successful_payment(message):
+        payload = message.successful_payment.invoice_payload
+        if payload.startswith("unlock_"):
+            token = payload.split("_", 1)[1]
+            
+            # Save paid user to DB
+            db = database.get_db()
+            db.uploads.update_one(
+                {"token_hash": storage.hash_token(token)},
+                {"$addToSet": {"paid_users": message.chat.id}}
+            )
+            
+            upload_doc = storage.retrieve_upload_by_token(token)
+            if upload_doc:
+                count = upload_doc.get('item_count', len(upload_doc.get('items', [])))
+                bot.send_message(
+                    message.chat.id,
+                    f"✅ Payment successful!\n\n📦 File Collection\n\nItems: {count}",
+                    reply_markup=keyboards.retrieve_keyboard(token)
+                )

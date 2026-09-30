@@ -13,6 +13,8 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 - **MongoDB**: Keeps track of metadata and token hashes (does not store raw tokens).
 - **Deep Links**: Easily retrieve files through Telegram deep linking (`https://t.me/Bot?start=token`).
 - **Bot Cloning System**: Users can clone the main bot using their own Bot Token. The main bot acts as the host and managers all webhooks automatically.
+- **Monetization (Telegram Stars)**: Charge users Telegram Stars to unlock access to specific files.
+- **Password Protection**: Secure files behind a custom password.
 - **Customizable Clones**: Clone owners get a dedicated control panel to configure settings:
   - **Force Sub**: Require users to join a specific channel before they can retrieve files.
   - **Auto Delete**: Automatically delete files sent to users after a certain time limit. *(Requires setting up a cron job like cron-job.org to ping `https://your-vercel-domain.vercel.app/api?cron=true` every 1 minute)*.
@@ -46,7 +48,11 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 
 - **/start**: Open the inline main menu.
 - **/upload**: Start a session to store new files. Send files and click `✅ Done`.
+  - **/pupload <password>**: Upload files protected by a password.
+  - **/supload <stars>**: Upload files that cost Telegram Stars to unlock.
 - **/batch**: Create a link from an existing sequence of messages in a channel.
+  - **/pbatch <password>**: Create a password-protected batch.
+  - **/sbatch <stars>**: Create a premium batch requiring Telegram Stars.
 - **/search <query>**: Search for files across the main bot and all clones (Main bot only).
 - **/settings**: Toggle media grouping and change the main bot's Public/Private mode (Admins only).
 - **/clone**: Start the process to clone the bot.
