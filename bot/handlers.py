@@ -91,8 +91,45 @@ def register_handlers(bot):
                 handle_mybots(message)
                 return
                 
+            if token.startswith('verify_'):
+                original_token = token.replace('verify_', '')
+                if not getattr(bot, 'is_main_bot', False):
+                    clone_info = database.get_cloned_bot_by_token(bot.token)
+                    if clone_info:
+                        val = clone_info.get("shortener_validity", 24)
+                        database.set_user_verified(message.chat.id, bot.token, val)
+                        bot.send_message(message.chat.id, "✅ You have been successfully verified!")
+                token = original_token
+                
             upload_doc = storage.retrieve_upload_by_token(token)
             if upload_doc:
+                # Check shortener
+                if not getattr(bot, 'is_main_bot', False):
+                    clone_info = database.get_cloned_bot_by_token(bot.token)
+                    if clone_info and clone_info.get("shortener_status"):
+                        if not database.is_user_verified(message.chat.id, bot.token):
+                            api_url = clone_info.get("shortener_api_url")
+                            api_key = clone_info.get("shortener_api_key")
+                            if api_url and api_key:
+                                import requests
+                                import urllib.parse
+                                dest_url = f"https://t.me/{bot.get_me().username}?start=verify_{token}"
+                                try:
+                                    res = requests.get(f"{api_url}?api={api_key}&url={urllib.parse.quote(dest_url)}").json()
+                                    short_url = res.get("shortenedUrl")
+                                except:
+                                    short_url = None
+                                    
+                                if short_url:
+                                    tutorial = clone_info.get("shortener_tutorial")
+                                    bot.send_message(
+                                        message.chat.id,
+                                        "🔒 **Verification Required**\n\nPlease verify your token to access this file.\nClick the link below and complete the steps.",
+                                        parse_mode="Markdown",
+                                        reply_markup=keyboards.shortener_verify_keyboard(short_url, tutorial)
+                                    )
+                                    return
+
                 count = upload_doc.get('item_count', len(upload_doc.get('items', [])))
                 bot.send_message(
                     message.chat.id,
@@ -173,7 +210,7 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
@@ -274,6 +311,83 @@ def register_handlers(bot):
                         bot.answer_callback_query(call.id, f"❌ Failed to restart: {e}", show_alert=True)
                 else:
                     bot.answer_callback_query(call.id, "❌ BASE_URL not configured.", show_alert=True)
+                    
+        elif action == 'shortener':
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                status = selected_bot.get("shortener_status", False)
+                status_text = "Enabled ✅" if status else "Disabled ❌"
+                url = selected_bot.get("shortener_api_url", "Not Set")
+                key = selected_bot.get("shortener_api_key", "Not Set")
+                val = selected_bot.get("shortener_validity", 24)
+                
+                text = (f"**Shortener Settings**\n\n"
+                        f"Users need to pass a shortened link to gain special access to messages from all clone shareable links. "
+                        f"This access will be valid for the next custom validity period.\n\n"
+                        f"- Status: {status_text}\n"
+                        f"- API URL: `{url}`\n"
+                        f"- API Key: `{key}`\n"
+                        f"- Validity: `{val} hours`")
+                bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.shortener_settings_keyboard(bot_id, selected_bot))
+                bot.answer_callback_query(call.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('short_'))
+    def handle_shortener_action(call):
+        action = call.data.split('_')[1]
+        bot_id = call.data.split('_', 2)[2]
+        
+        selected_bot = database.get_cloned_bot_by_id(bot_id)
+        if not selected_bot:
+            bot.answer_callback_query(call.id, "Bot not found.", show_alert=True)
+            return
+            
+        token = selected_bot['token']
+        
+        if action == 'back':
+            bot.edit_message_text("Customize Clone Settings:", call.message.chat.id, call.message.message_id, reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.answer_callback_query(call.id)
+            return
+            
+        elif action == 'toggle':
+            current = selected_bot.get("shortener_status", False)
+            database.update_cloned_bot_setting(token, "shortener_status", not current)
+            bot.answer_callback_query(call.id, f"Shortener {'Enabled' if not current else 'Disabled'}")
+            
+            # Refresh menu
+            selected_bot["shortener_status"] = not current
+            status_text = "Enabled ✅" if not current else "Disabled ❌"
+            url = selected_bot.get("shortener_api_url", "Not Set")
+            key = selected_bot.get("shortener_api_key", "Not Set")
+            val = selected_bot.get("shortener_validity", 24)
+            text = (f"**Shortener Settings**\n\n"
+                    f"Users need to pass a shortened link to gain special access to messages from all clone shareable links. "
+                    f"This access will be valid for the next custom validity period.\n\n"
+                    f"- Status: {status_text}\n"
+                    f"- API URL: `{url}`\n"
+                    f"- API Key: `{key}`\n"
+                    f"- Validity: `{val} hours`")
+            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.shortener_settings_keyboard(bot_id, selected_bot))
+            return
+            
+        elif action == 'apiurl':
+            database.set_user_state(call.message.chat.id, "awaiting_short_apiurl", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send your shortener site API URL (e.g. `https://earn4link.in/api`).", parse_mode="Markdown", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'apikey':
+            database.set_user_state(call.message.chat.id, "awaiting_short_apikey", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send your shortener site API Key.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'validity':
+            database.set_user_state(call.message.chat.id, "awaiting_short_validity", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the validity period in hours (e.g. `24`).", parse_mode="Markdown", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'tutorial':
+            database.set_user_state(call.message.chat.id, "awaiting_short_tutorial", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the tutorial URL (e.g. a Telegram post or YouTube video link on how to bypass).", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
 
     # ─────────────────────────────────────────────
     # Send all files when user clicks the button
@@ -545,6 +659,50 @@ def register_handlers(bot):
         # ── State machine ──
         state, state_data = database.get_user_state(user_id)
         
+        if state in ["awaiting_short_apiurl", "awaiting_short_apikey", "awaiting_short_validity", "awaiting_short_tutorial"]:
+            if not message.text:
+                return
+            val = message.text.strip()
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if not selected_bot:
+                return
+                
+            token = selected_bot['token']
+            if state == "awaiting_short_apiurl":
+                if not val.startswith("http"):
+                    val = "https://" + val
+                database.update_cloned_bot_setting(token, "shortener_api_url", val)
+                bot.send_message(user_id, "✅ API URL updated.")
+            elif state == "awaiting_short_apikey":
+                database.update_cloned_bot_setting(token, "shortener_api_key", val)
+                bot.send_message(user_id, "✅ API Key updated.")
+            elif state == "awaiting_short_validity":
+                database.update_cloned_bot_setting(token, "shortener_validity", val)
+                bot.send_message(user_id, "✅ Validity updated.")
+            elif state == "awaiting_short_tutorial":
+                database.update_cloned_bot_setting(token, "shortener_tutorial", val)
+                bot.send_message(user_id, "✅ Tutorial URL updated.")
+                
+            database.set_user_state(user_id, None)
+            
+            # Send back to shortener settings
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            status = selected_bot.get("shortener_status", False)
+            status_text = "Enabled ✅" if status else "Disabled ❌"
+            url = selected_bot.get("shortener_api_url", "Not Set")
+            key = selected_bot.get("shortener_api_key", "Not Set")
+            val = selected_bot.get("shortener_validity", 24)
+            text = (f"**Shortener Settings**\n\n"
+                    f"Users need to pass a shortened link to gain special access to messages from all clone shareable links. "
+                    f"This access will be valid for the next custom validity period.\n\n"
+                    f"- Status: {status_text}\n"
+                    f"- API URL: `{url}`\n"
+                    f"- API Key: `{key}`\n"
+                    f"- Validity: `{val} hours`")
+            bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=keyboards.shortener_settings_keyboard(bot_id, selected_bot))
+            return
+
         if state == "awaiting_force_sub":
             bot_id = state_data.get('bot_id')
             selected_bot = database.get_cloned_bot_by_id(bot_id)

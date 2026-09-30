@@ -87,3 +87,26 @@ def update_cloned_bot_setting(token, key, value):
         {"token": token},
         {"$set": {key: value}}
     )
+
+def is_user_verified(user_id, bot_token):
+    db = get_db()
+    session = db.shortener_sessions.find_one({"user_id": user_id, "bot_token": bot_token})
+    if session:
+        from datetime import datetime
+        if session.get('expires_at') and session['expires_at'] > datetime.utcnow():
+            return True
+    return False
+
+def set_user_verified(user_id, bot_token, validity_hours):
+    db = get_db()
+    from datetime import datetime, timedelta
+    try:
+        validity_hours = float(validity_hours)
+    except:
+        validity_hours = 24.0
+    expires_at = datetime.utcnow() + timedelta(hours=validity_hours)
+    db.shortener_sessions.update_one(
+        {"user_id": user_id, "bot_token": bot_token},
+        {"$set": {"expires_at": expires_at}},
+        upsert=True
+    )

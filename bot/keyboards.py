@@ -89,10 +89,11 @@ def clone_settings_keyboard(bot_id):
         InlineKeyboardButton("DEACTIVATE", callback_data=f"clone_deact_{bot_id}")
     )
     markup.add(
-        InlineKeyboardButton("STATS", callback_data=f"clone_stats_{bot_id}")
+        InlineKeyboardButton("STATS", callback_data=f"clone_stats_{bot_id}"),
+        InlineKeyboardButton("SHORTENER", callback_data=f"clone_shortener_{bot_id}")
     )
     
-    markup.add(InlineKeyboardButton("⏤ Manage Token ⏤", callback_data="clone_ignore"))
+    markup.add(InlineKeyboardButton("👇🏻 ⏤ Manage Token ⏤ 👇🏻", callback_data="clone_ignore"))
     
     markup.add(
         InlineKeyboardButton("UPDATE TOKEN", callback_data=f"clone_token_{bot_id}"),
@@ -112,6 +113,30 @@ def force_sub_keyboard(channel_url, bot_username=None, original_text=None):
     if original_text and bot_username and '/start ' in original_text:
         # Pass the original command back so the user can just click it after joining
         markup.add(InlineKeyboardButton("🔄 Try Again", url=f"https://t.me/{bot_username}?start={original_text.replace('/start ', '')}"))
+    return markup
+
+def shortener_settings_keyboard(bot_id, clone_info):
+    markup = InlineKeyboardMarkup()
+    status = clone_info.get("shortener_status", False)
+    status_text = "Disable ❌" if status else "Enable ✅"
+    
+    markup.add(InlineKeyboardButton(status_text, callback_data=f"short_toggle_{bot_id}"))
+    markup.add(
+        InlineKeyboardButton("API URL", callback_data=f"short_apiurl_{bot_id}"),
+        InlineKeyboardButton("API Key", callback_data=f"short_apikey_{bot_id}")
+    )
+    markup.add(
+        InlineKeyboardButton("Validity", callback_data=f"short_validity_{bot_id}"),
+        InlineKeyboardButton("Tutorial", callback_data=f"short_tutorial_{bot_id}")
+    )
+    markup.add(InlineKeyboardButton("BACK", callback_data=f"short_back_{bot_id}"))
+    return markup
+
+def shortener_verify_keyboard(short_url, tutorial_url=None):
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🔗 Verify / Unlock", url=short_url))
+    if tutorial_url:
+        markup.add(InlineKeyboardButton("❓ How to open", url=tutorial_url))
     return markup
 
 def force_sub_select_keyboard():
