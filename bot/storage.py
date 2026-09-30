@@ -113,7 +113,16 @@ def store_session(bot, user_id, items_data):
 
     raw_token = generate_token()
     token_hash = hash_token(raw_token)
-
+    
+    search_text = ""
+    for item in items_data:
+        if isinstance(item, dict) and item.get('text'):
+            search_text += item['text'] + " "
+    search_text = search_text.strip().lower()
+    
+    if not hasattr(bot, 'bot_username'):
+        bot.bot_username = bot.get_me().username
+        
     db.uploads.insert_one({
         "owner_id": user_id,
         "token_hash": token_hash,
@@ -122,6 +131,9 @@ def store_session(bot, user_id, items_data):
         "source_chat_id": storage_chat_id,
         "item_count": len(storage_message_ids),
         "created_at": datetime.now(timezone.utc),
+        "search_text": search_text,
+        "bot_username": bot.bot_username,
+        "raw_token": raw_token
     })
 
     return raw_token, len(storage_message_ids), failed

@@ -591,6 +591,46 @@ def register_handlers(bot):
         handle_done(call.message)
 
     # ─────────────────────────────────────────────
+    # /search
+    # ─────────────────────────────────────────────
+
+    @bot.message_handler(commands=['search'])
+    def handle_search(message):
+        if not getattr(bot, 'is_main_bot', False):
+            return # Only in main bot
+            
+        query = message.text[len('/search '):].strip()
+        if not query:
+            bot.send_message(message.chat.id, "🔍 Please provide a search query. Example:\n`/search python`", parse_mode="Markdown")
+            return
+            
+        bot.send_message(message.chat.id, "🔍 Searching...")
+        
+        db = database.get_db()
+        regex_query = {"$regex": query, "$options": "i"}
+        results = list(db.uploads.find({"search_text": regex_query, "raw_token": {"$exists": True}}).limit(20))
+        
+        if not results:
+            bot.send_message(message.chat.id, "❌ No files found matching your query.\n\n*Note: Only files uploaded after the search feature was added will appear here.*", parse_mode="Markdown")
+            return
+            
+        text = f"🔍 **Search Results for:** `{query}`\n\n"
+        for idx, doc in enumerate(results, 1):
+            bot_username = doc.get("bot_username", bot.get_me().username)
+            token = doc.get("raw_token")
+            count = doc.get("item_count", 1)
+            
+            words = doc.get("search_text", "").split()
+            matched_word = next((w for w in words if query.lower() in w.lower()), "File Batch")
+            # Trim matched_word if too long
+            if len(matched_word) > 40:
+                matched_word = matched_word[:37] + "..."
+                
+            text += f"📦 [{matched_word} ({count} items)](https://t.me/{bot_username}?start={token})\n"
+            
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+
+    # ─────────────────────────────────────────────
     # /settings
     # ─────────────────────────────────────────────
 
@@ -1072,11 +1112,26 @@ def register_handlers(bot):
         user_settings = settings.get_user_settings(user_id)
         grouping = user_settings.get("group_media", False)
 
+        # Extract searchable text (caption, file name, or text message)
+        search_text = ""
+        if message.text:
+            search_text += message.text + " "
+        if message.caption:
+            search_text += message.caption + " "
+        if message.document and message.document.file_name:
+            search_text += message.document.file_name + " "
+        if message.video and message.video.file_name:
+            search_text += message.video.file_name + " "
+        if message.audio and message.audio.title:
+            search_text += message.audio.title + " "
+            
+        search_text = search_text.strip().lower()
+
         # When OFF: silently cap at 20, store bare message ID
         if not grouping:
             if len(session.get('message_ids', [])) >= 20:
                 return
-            upload_session.add_message(user_id, message.message_id)
+            upload_session.add_message(user_id, {"id": message.message_id, "text": search_text})
             return
 
         # When ON: store metadata so storage.py can group into albums
@@ -1094,5 +1149,6 @@ def register_handlers(bot):
         upload_session.add_message(user_id, {
             "message_id": message.message_id,
             "media_type": mt,
-            "file_id": fid
+            "file_id": fid,
+            "text": search_text
         })
