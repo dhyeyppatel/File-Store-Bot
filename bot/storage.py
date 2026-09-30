@@ -68,11 +68,11 @@ def store_session(bot, user_id, items_data, password=None, stars=None):
                 mt = item.get('media_type', 'other')
                 fid = item.get('file_id')
                 if mt in GROUPABLE and fid:
-                    groups.setdefault(mt, []).append(fid)
+                    groups.setdefault(mt, []).append(item)
                 else:
-                    singles.append(item['message_id'])
+                    singles.append(item)
             else:
-                singles.append(int(item))
+                singles.append(item)
 
         # Send each media type as albums (≤10 per group)
         MEDIA_CLS = {
@@ -81,29 +81,31 @@ def store_session(bot, user_id, items_data, password=None, stars=None):
             'document': telebot.types.InputMediaDocument,
             'audio':    telebot.types.InputMediaAudio,
         }
-        for mt, fids in groups.items():
-            for chunk in chunk_list(fids, 10):
-                media_group = [MEDIA_CLS[mt](fid) for fid in chunk]
+        for mt, items in groups.items():
+            for chunk in chunk_list(items, 10):
+                media_group = [MEDIA_CLS[mt](item['file_id']) for item in chunk]
                 try:
                     sent = bot.send_media_group(chat_id=storage_chat_id, media=media_group)
-                    for m in sent:
-                        storage_message_ids.append(m.message_id)
+                    for i, m in enumerate(sent):
+                        storage_message_ids.append({"id": m.message_id, "text": chunk[i].get('text', '')})
                 except Exception as e:
                     print(f"[store_session] send_media_group({mt}) failed: {e}")
                     failed += len(chunk)
 
         # Send singles via copy_messages
         if singles:
-            singles.sort()
+            singles.sort(key=lambda x: x.get('message_id', 0) if isinstance(x, dict) else int(x))
             for chunk in chunk_list(singles, 100):
                 try:
+                    orig_ids = [x.get('message_id') if isinstance(x, dict) else int(x) for x in chunk]
                     result = bot.copy_messages(
                         chat_id=storage_chat_id,
                         from_chat_id=user_id,
-                        message_ids=chunk
+                        message_ids=orig_ids
                     )
-                    for msg_obj in result:
-                        storage_message_ids.append(msg_obj.message_id)
+                    for i, msg_obj in enumerate(result):
+                        original_text = chunk[i].get('text', '') if isinstance(chunk[i], dict) else ""
+                        storage_message_ids.append({"id": msg_obj.message_id, "text": original_text})
                 except Exception as e:
                     print(f"[store_session] copy_messages(singles) failed: {e}")
                     failed += len(chunk)
@@ -180,9 +182,10 @@ def send_upload_items(bot, user_id, upload_doc, protect_content=False):
     """Send stored files to the user using copy_messages."""
     source = upload_doc.get("source_chat_id") or os.getenv('STORAGE_CHAT_ID')
     items = upload_doc.get('items', [])
+    orig_ids = [item.get("id", item.get("message_id")) if isinstance(item, dict) else int(item) for item in items]
 
     sent_ids = []
-    for chunk in chunk_list(items, 100):
+    for chunk in chunk_list(orig_ids, 100):
         try:
             res = bot.copy_messages(
                 chat_id=user_id,

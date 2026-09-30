@@ -657,25 +657,58 @@ def register_handlers(bot):
         
         db = database.get_db()
         regex_query = {"$regex": query, "$options": "i"}
-        results = list(db.uploads.find({"search_text": regex_query, "raw_token": {"$exists": True}}).limit(20))
+        results = list(db.uploads.find({"search_text": regex_query, "raw_token": {"$exists": True}}).limit(100))
         
         if not results:
             bot.send_message(message.chat.id, "❌ No files found matching your query.\n\n*Note: Only files uploaded after the search feature was added will appear here.*", parse_mode="Markdown")
             return
             
-        text = f"🔍 **Search Results for:** `{query}`\n\n"
-        for idx, doc in enumerate(results, 1):
+        # Group matching items by bot_username and source_chat
+        bot_groups = {}
+        for doc in results:
             bot_username = doc.get("bot_username", bot.get_me().username)
-            token = doc.get("raw_token")
-            count = doc.get("item_count", 1)
+            source_chat = doc.get("source_chat_id")
             
-            words = doc.get("search_text", "").split()
+            matched_items = []
+            for item in doc.get("items", []):
+                if isinstance(item, dict):
+                    if query.lower() in item.get("text", "").lower():
+                        matched_items.append(item)
+                        
+            if matched_items:
+                key = (bot_username, source_chat)
+                if key not in bot_groups:
+                    bot_groups[key] = []
+                bot_groups[key].extend(matched_items)
+                
+        if not bot_groups:
+            bot.send_message(message.chat.id, "❌ No individual files found matching your query.", parse_mode="Markdown")
+            return
+            
+        text = f"🔍 **Search Results for:** `{query}`\n\n"
+        for (bot_username, source_chat), items in bot_groups.items():
+            raw_token = storage.generate_token()
+            token_hash = storage.hash_token(raw_token)
+            
+            db.uploads.insert_one({
+                "owner_id": message.chat.id,
+                "token_hash": token_hash,
+                "status": "stored",
+                "items": items,
+                "source_chat_id": source_chat,
+                "item_count": len(items),
+                "created_at": datetime.now(timezone.utc),
+                "bot_username": bot_username,
+                "raw_token": raw_token
+            })
+            
+            first_text = items[0].get("text", "File Batch")
+            words = first_text.split()
             matched_word = next((w for w in words if query.lower() in w.lower()), "File Batch")
-            # Trim matched_word if too long
             if len(matched_word) > 40:
                 matched_word = matched_word[:37] + "..."
                 
-            text += f"📦 [{matched_word} ({count} items)](https://t.me/{bot_username}?start={token})\n"
+            text += f"📦 [{matched_word} ({len(items)} items)](https://t.me/{bot_username}?start={raw_token})\n"
             
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
 
