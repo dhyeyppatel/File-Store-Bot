@@ -15,9 +15,14 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 - **Bot Cloning System**: Users can clone the main bot using their own Bot Token. The main bot acts as the host and managers all webhooks automatically.
 - **Customizable Clones**: Clone owners get a dedicated control panel to configure settings:
   - **Force Sub**: Require users to join a specific channel before they can retrieve files.
+  - **Auto Delete**: Automatically delete files sent to users after a certain time limit. *(Requires setting up a cron job like cron-job.org to ping `https://your-vercel-domain.vercel.app/api?cron=true` every 1 minute)*.
+  - **Custom Start Message**: Configure what the bot says when users run `/start`.
+  - **Link Shortener Integration**: Force users to pass through shortener services (like earn4link.in) before accessing files, enabling monetization.
+  - **Custom Storage Channels**: Clone owners can route their uploads to their own private database channels.
   - **Moderators**: Assign specific users who can upload and create batches.
+  - **Stats Tracking**: Track the total number of users and total uploads across the bot.
   - **Public/Private Modes**: Restrict uploads to only admins/moderators (Private) or allow anyone to upload (Public).
-  - **Auto Delete**: Automatically delete files sent to users after a certain time. *(Requires setting up a cron job like cron-job.org to ping `https://your-vercel-domain.vercel.app/api?cron=true` every 1 minute)*.
+- **Global Search**: Search for files (`/search <query>`) directly from the main bot. It will scan uploads across all clone bots and return direct hyperlinks.
 - **Inline Menus**: Clean and modern UI using inline buttons instead of bulky reply keyboards.
 
 ## Setup
@@ -42,6 +47,7 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 - **/start**: Open the inline main menu.
 - **/upload**: Start a session to store new files. Send files and click `✅ Done`.
 - **/batch**: Create a link from an existing sequence of messages in a channel.
+- **/search <query>**: Search for files across the main bot and all clones (Main bot only).
 - **/settings**: Toggle media grouping and change the main bot's Public/Private mode (Admins only).
 - **/clone**: Start the process to clone the bot.
-- **/mybots**: View and configure settings for your cloned bots.
+- **/mybots**: View and configure comprehensive settings for your cloned bots.
