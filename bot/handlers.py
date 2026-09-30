@@ -342,19 +342,25 @@ def register_handlers(bot):
         is_main = getattr(bot, 'is_main_bot', False)
         is_admin = False
         mode = "public"
+        
         if is_main:
             admin_ids = [int(i.strip()) for i in os.getenv('ADMIN_IDS', '').split(',') if i.strip()]
             if message.chat.id in admin_ids:
                 is_admin = True
                 main_settings = settings.get_global_settings()
                 mode = main_settings.get("mode", "public")
+        else:
+            clone_info = database.get_cloned_bot_by_token(bot.token)
+            if clone_info and message.chat.id == clone_info.get('owner_id'):
+                is_admin = True
+                mode = clone_info.get("mode", "public")
                 
         text = (f"⚙️ Settings\n\n"
                 f"Group Media: {status}\n\n"
                 f"If ON — files are grouped into albums when storing (no upload limit).\n"
                 f"If OFF — files stored individually, max 20 items per upload.")
         if is_admin:
-            text += f"\n\nMain Bot Mode: {mode.upper()}"
+            text += f"\n\nBot Mode: {mode.upper()}"
             
         bot.send_message(message.chat.id, text, reply_markup=keyboards.settings_keyboard(grouping, is_admin, mode))
 
@@ -371,12 +377,18 @@ def register_handlers(bot):
         is_main = getattr(bot, 'is_main_bot', False)
         is_admin = False
         mode = "public"
+        
         if is_main:
             admin_ids = [int(i.strip()) for i in os.getenv('ADMIN_IDS', '').split(',') if i.strip()]
             if call.message.chat.id in admin_ids:
                 is_admin = True
                 main_settings = settings.get_global_settings()
                 mode = main_settings.get("mode", "public")
+        else:
+            clone_info = database.get_cloned_bot_by_token(bot.token)
+            if clone_info and call.message.chat.id == clone_info.get('owner_id'):
+                is_admin = True
+                mode = clone_info.get("mode", "public")
                 
         bot.answer_callback_query(call.id, f"Group Media {status}")
         text = (f"⚙️ Settings\n\n"
@@ -384,14 +396,24 @@ def register_handlers(bot):
                 f"If ON — files are grouped into albums when storing (no upload limit).\n"
                 f"If OFF — files stored individually, max 20 items per upload.")
         if is_admin:
-            text += f"\n\nMain Bot Mode: {mode.upper()}"
+            text += f"\n\nBot Mode: {mode.upper()}"
             
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                               reply_markup=keyboards.settings_keyboard(new_val, is_admin, mode))
 
     @bot.callback_query_handler(func=lambda call: call.data == 'toggle_main_mode')
     def handle_toggle_main_mode(call):
-        new_mode = settings.toggle_main_bot_mode()
+        is_main = getattr(bot, 'is_main_bot', False)
+        new_mode = "public"
+        
+        if is_main:
+            new_mode = settings.toggle_main_bot_mode()
+        else:
+            clone_info = database.get_cloned_bot_by_token(bot.token)
+            if clone_info:
+                current_mode = clone_info.get("mode", "public")
+                new_mode = "private" if current_mode == "public" else "public"
+                database.update_cloned_bot_setting(bot.token, 'mode', new_mode)
         
         user_settings = settings.get_user_settings(call.message.chat.id)
         grouping = user_settings.get("group_media", False)
@@ -402,7 +424,7 @@ def register_handlers(bot):
                 f"Group Media: {status}\n\n"
                 f"If ON — files are grouped into albums when storing (no upload limit).\n"
                 f"If OFF — files stored individually, max 20 items per upload.\n\n"
-                f"Main Bot Mode: {new_mode.upper()}")
+                f"Bot Mode: {new_mode.upper()}")
                 
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
                               reply_markup=keyboards.settings_keyboard(grouping, True, new_mode))
