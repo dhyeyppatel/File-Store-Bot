@@ -79,7 +79,6 @@ class handler(BaseHTTPRequestHandler):
             return
             
         if 'setup=true' in self.path:
-            import telebot
             from telebot.types import BotCommand
             import bot.telegram as tg_module
             

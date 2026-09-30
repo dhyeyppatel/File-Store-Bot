@@ -54,10 +54,6 @@ def get_cloned_bots(user_id):
     db = get_db()
     return list(db.cloned_bots.find({"owner_id": user_id, "status": "active"}))
 
-def remove_cloned_bot(token):
-    db = get_db()
-    db.cloned_bots.delete_one({"token": token})
-
 def delete_cloned_bot_by_id(bot_id):
     db = get_db()
     from bson.objectid import ObjectId
