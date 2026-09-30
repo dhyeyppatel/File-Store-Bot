@@ -1224,7 +1224,7 @@ def register_handlers(bot):
         if not grouping:
             if len(session.get('message_ids', [])) >= 20:
                 return
-            upload_session.add_message(user_id, {"id": message.message_id, "text": search_text})
+            upload_session.add_message(user_id, {"message_id": message.message_id, "text": search_text})
             return
 
         # When ON: store metadata so storage.py can group into albums
