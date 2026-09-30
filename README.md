@@ -7,10 +7,17 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 ## Features
 - **Serverless Architecture**: Deploy directly to Vercel.
 - **Upload Sessions**: Upload multiple files, photos, videos, and messages in a single batch.
+- **Batch Forwarding**: Create a file collection directly from an existing channel using message links.
 - **Storage Channel**: Files are actually stored securely in a private Telegram channel.
 - **Secure Links**: Generates random cryptographically secure tokens.
 - **MongoDB**: Keeps track of metadata and token hashes (does not store raw tokens).
 - **Deep Links**: Easily retrieve files through Telegram deep linking (`https://t.me/Bot?start=token`).
+- **Bot Cloning System**: Users can clone the main bot using their own Bot Token. The main bot acts as the host and managers all webhooks automatically.
+- **Customizable Clones**: Clone owners get a dedicated control panel to configure settings:
+  - **Force Sub**: Require users to join a specific channel before they can retrieve files.
+  - **Moderators**: Assign specific users who can upload and create batches.
+  - **Public/Private Modes**: Restrict uploads to only admins/moderators (Private) or allow anyone to upload (Public).
+- **Inline Menus**: Clean and modern UI using inline buttons instead of bulky reply keyboards.
 
 ## Setup
 
@@ -31,4 +38,9 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 
 ## Usage
 
-Start an upload session by sending `/upload` to the bot. Send any number of files or messages, and click `✅ Done` to finish and generate your secure link.
+- **/start**: Open the inline main menu.
+- **/upload**: Start a session to store new files. Send files and click `✅ Done`.
+- **/batch**: Create a link from an existing sequence of messages in a channel.
+- **/settings**: Toggle media grouping and change the main bot's Public/Private mode (Admins only).
+- **/clone**: Start the process to clone the bot.
+- **/mybots**: View and configure settings for your cloned bots.

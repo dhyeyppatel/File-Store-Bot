@@ -151,7 +151,7 @@ def retrieve_upload_by_token(token):
     return db.uploads.find_one({"token_hash": token_hash, "status": "stored"})
 
 
-def send_upload_items(bot, user_id, upload_doc):
+def send_upload_items(bot, user_id, upload_doc, protect_content=False):
     """Send stored files to the user using copy_messages."""
     source = upload_doc.get("source_chat_id") or os.getenv('STORAGE_CHAT_ID')
     items = upload_doc.get('items', [])
@@ -161,7 +161,8 @@ def send_upload_items(bot, user_id, upload_doc):
             bot.copy_messages(
                 chat_id=user_id,
                 from_chat_id=source,
-                message_ids=chunk
+                message_ids=chunk,
+                protect_content=protect_content
             )
         except Exception as e:
             print(f"[send_upload_items] copy_messages failed: {e}")

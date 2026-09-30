@@ -57,3 +57,19 @@ def get_cloned_bots(user_id):
 def remove_cloned_bot(token):
     db = get_db()
     db.cloned_bots.delete_one({"token": token})
+
+def get_cloned_bot_by_token(token):
+    db = get_db()
+    return db.cloned_bots.find_one({"token": token, "status": "active"})
+
+def get_cloned_bot_by_id(bot_id):
+    from bson.objectid import ObjectId
+    db = get_db()
+    return db.cloned_bots.find_one({"_id": ObjectId(bot_id), "status": "active"})
+
+def update_cloned_bot_setting(token, key, value):
+    db = get_db()
+    db.cloned_bots.update_one(
+        {"token": token},
+        {"$set": {key: value}}
+    )

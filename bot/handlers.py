@@ -4,6 +4,61 @@ import telebot
 
 from bot import upload_session, storage, keyboards, settings, database
 
+def check_permissions(bot, message, action="use"):
+    user_id = message.chat.id
+    
+    if getattr(bot, 'is_main_bot', False):
+        if action == "upload":
+            main_settings = settings.get_global_settings()
+            if main_settings.get("mode") == "private":
+                admin_ids = [int(i.strip()) for i in os.getenv('ADMIN_IDS', '').split(',') if i.strip()]
+                if user_id not in admin_ids:
+                    bot.send_message(user_id, "❌ The main bot is in private mode. Only admins can upload files.")
+                    return False
+        return True
+    
+    clone_info = database.get_cloned_bot_by_token(bot.token)
+    if not clone_info:
+        return True
+        
+    if clone_info.get("deactivated", False):
+        bot.send_message(user_id, "❌ This bot has been deactivated by its owner.")
+        return False
+        
+    if action == "upload":
+        if clone_info.get("mode", "public") == "private":
+            if user_id == clone_info.get('owner_id'):
+                return True
+            mods = clone_info.get('moderators', [])
+            if user_id in mods:
+                return True
+            bot.send_message(user_id, "❌ This bot is in private mode. You do not have permission to upload files.")
+            return False
+        return True
+        
+    if action == "use":
+        force_sub = clone_info.get('force_sub')
+        if force_sub:
+            try:
+                member = bot.get_chat_member(force_sub, user_id)
+                if member.status in ['left', 'kicked']:
+                    bot_username = clone_info.get('username')
+                    if str(force_sub).startswith('-100'):
+                        url = bot.export_chat_invite_link(force_sub)
+                    else:
+                        url = f"https://t.me/{str(force_sub).replace('@', '')}"
+                        
+                    bot.send_message(
+                        user_id, 
+                        f"📢 You must join our channel to use this bot!",
+                        reply_markup=keyboards.force_sub_keyboard(url, bot_username, message.text)
+                    )
+                    return False
+            except telebot.apihelper.ApiTelegramException:
+                pass
+                
+    return True
+
 def register_handlers(bot):
     
     # ─────────────────────────────────────────────
@@ -12,6 +67,9 @@ def register_handlers(bot):
 
     @bot.message_handler(commands=['start'])
     def handle_start(message):
+        if not check_permissions(bot, message, "use"):
+            return
+            
         args = message.text.split(maxsplit=1)
         if len(args) > 1:
             token = args[1]
@@ -40,16 +98,11 @@ def register_handlers(bot):
             if is_main:
                 msg += "\n\nYou can also manage your bots using /mybots."
                 
-            inline_kb = keyboards.start_inline_keyboard(is_main)
-            if inline_kb:
-                bot.send_message(message.chat.id, msg, reply_markup=inline_kb)
-                bot.send_message(message.chat.id, "Menu activated 👇", reply_markup=keyboards.main_menu_keyboard(is_main))
-            else:
-                bot.send_message(
-                    message.chat.id, 
-                    msg, 
-                    reply_markup=keyboards.main_menu_keyboard(is_main)
-                )
+            bot.send_message(
+                message.chat.id, 
+                msg, 
+                reply_markup=keyboards.main_menu_keyboard(is_main)
+            )
 
     # ─────────────────────────────────────────────
     # Bot Cloning logic
@@ -64,6 +117,11 @@ def register_handlers(bot):
         else:
             bot.send_message(message.chat.id, "❌ This command is only available on the main bot.")
             
+    @bot.callback_query_handler(func=lambda call: call.data == 'menu_clone')
+    def handle_menu_clone(call):
+        bot.answer_callback_query(call.id)
+        handle_clone_cmd(call.message)
+            
     @bot.message_handler(commands=['mybots'])
     def handle_mybots(message):
         if not getattr(bot, 'is_main_bot', False):
@@ -74,11 +132,87 @@ def register_handlers(bot):
             bot.send_message(message.chat.id, "You haven't cloned any bots yet. Use /clone to start!")
             return
             
-        text = "🤖 **Your Cloned Bots:**\n\n"
-        for b in bots:
-            text += f"• @{b['username']}\n"
+        text = "🤖 **Your Cloned Bots:**\n\nSelect a bot below to customize its settings:"
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=keyboards.mybots_keyboard(bots))
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'mybots_back')
+    def handle_mybots_back(call):
+        bots = database.get_cloned_bots(call.message.chat.id)
+        if not bots:
+            bot.edit_message_text("You haven't cloned any bots yet. Use /clone to start!", call.message.chat.id, call.message.message_id)
+            return
+            
+        text = "🤖 **Your Cloned Bots:**\n\nSelect a bot below to customize its settings:"
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.mybots_keyboard(bots))
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('clone_set_'))
+    def handle_clone_settings(call):
+        bot_id = call.data.split('_', 2)[2]
+        bots = database.get_cloned_bots(call.message.chat.id)
         
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+        selected_bot = next((b for b in bots if str(b['_id']) == bot_id), None)
+        if not selected_bot:
+            bot.answer_callback_query(call.id, "Bot not found.", show_alert=True)
+            return
+            
+        text = f"🪄 **Customize Clone**\n\n➔ *Name:* @{selected_bot['username']}\n\nConfigure Your Clone Settings Using Given Buttons"
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('clone_') and 'clone_set_' not in call.data and 'mybots' not in call.data)
+    def handle_clone_action(call):
+        # Allow pass-through for other specific clone action handlers, this is just a stub for unimplemented ones
+        action = call.data.split('_')[1]
+        
+        # Check if we should stub it
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact'] 
+        
+        if action not in implemented_actions and action != 'settings':
+            bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
+            return
+            
+        bot_id = call.data.split('_', 2)[2]
+        
+        if action == 'mode':
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                token = selected_bot['token']
+                current = selected_bot.get('mode', 'public')
+                new_val = 'private' if current == 'public' else 'public'
+                database.update_cloned_bot_setting(token, 'mode', new_val)
+                bot.answer_callback_query(call.id, f"Mode changed to {new_val.upper()}!", show_alert=True)
+            return
+            
+        if action == 'nofwd':
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                token = selected_bot['token']
+                current = selected_bot.get('no_forward', False)
+                new_val = not current
+                database.update_cloned_bot_setting(token, 'no_forward', new_val)
+                status = "ENABLED 🟢" if new_val else "DISABLED 🔴"
+                bot.answer_callback_query(call.id, f"No Forward is now {status}", show_alert=True)
+            return
+
+        if action == 'deact':
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                token = selected_bot['token']
+                current = selected_bot.get('deactivated', False)
+                new_val = not current
+                database.update_cloned_bot_setting(token, 'deactivated', new_val)
+                status = "DEACTIVATED 🛑" if new_val else "ACTIVATED 🟢"
+                bot.answer_callback_query(call.id, f"Bot is now {status}", show_alert=True)
+            return
+            
+        if action == 'forcesub':
+            database.set_user_state(call.message.chat.id, "awaiting_force_sub", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the Channel Username (e.g. @channel) or ID (e.g. -100123456) for Force Sub.\n\nSend /disable to turn it off.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'mods':
+            database.set_user_state(call.message.chat.id, "awaiting_mods", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send a list of User IDs (separated by space) to set as moderators.\n\nSend /clear to remove all moderators.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
 
     # ─────────────────────────────────────────────
     # Send all files when user clicks the button
@@ -86,11 +220,25 @@ def register_handlers(bot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('send_all_'))
     def handle_send_all(call):
+        # We simulate a message context to check permissions using call.message
+        # But we need to make sure the chat ID is correct
+        if not check_permissions(bot, call.message, "use"):
+            bot.answer_callback_query(call.id, "Please join the required channel first.", show_alert=True)
+            return
+            
         token = call.data.split('_', 2)[2]
         upload_doc = storage.retrieve_upload_by_token(token)
         if upload_doc:
             bot.answer_callback_query(call.id, "Sending files...")
-            storage.send_upload_items(bot, call.message.chat.id, upload_doc)
+            
+            # Check if NO FORWARD is enabled for this bot
+            protect = False
+            if not getattr(bot, 'is_main_bot', False):
+                clone_info = database.get_cloned_bot_by_token(bot.token)
+                if clone_info:
+                    protect = clone_info.get("no_forward", False)
+                    
+            storage.send_upload_items(bot, call.message.chat.id, upload_doc, protect_content=protect)
         else:
             bot.answer_callback_query(call.id, "❌ Invalid or expired link.", show_alert=True)
 
@@ -101,6 +249,9 @@ def register_handlers(bot):
     @bot.message_handler(commands=['upload'])
     @bot.message_handler(func=lambda m: m.text == "📤 Upload Files")
     def handle_upload(message):
+        if not check_permissions(bot, message, "upload"):
+            return
+            
         upload_session.start_session(message.chat.id)
         user_settings = settings.get_user_settings(message.chat.id)
         grouping = user_settings.get("group_media", False)
@@ -111,6 +262,11 @@ def register_handlers(bot):
             reply_markup=keyboards.upload_keyboard()
         )
 
+    @bot.callback_query_handler(func=lambda call: call.data == 'menu_upload')
+    def handle_menu_upload(call):
+        bot.answer_callback_query(call.id)
+        handle_upload(call.message)
+
     @bot.message_handler(func=lambda m: m.text == "❌ Cancel")
     def handle_cancel(message):
         user_id = message.chat.id
@@ -118,6 +274,11 @@ def register_handlers(bot):
         database.set_user_state(user_id, None)
         is_main = getattr(bot, 'is_main_bot', False)
         bot.send_message(user_id, "❌ Operation cancelled.", reply_markup=keyboards.main_menu_keyboard(is_main))
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'cancel_action')
+    def handle_cancel_action(call):
+        bot.answer_callback_query(call.id)
+        handle_cancel(call.message)
 
     @bot.message_handler(func=lambda m: m.text == "✅ Done")
     def handle_done(message):
@@ -162,6 +323,11 @@ def register_handlers(bot):
         else:
             bot.send_message(user_id, "❌ Failed to store files. Please try again.")
 
+    @bot.callback_query_handler(func=lambda call: call.data == 'upload_done')
+    def handle_upload_done_action(call):
+        bot.answer_callback_query(call.id)
+        handle_done(call.message)
+
     # ─────────────────────────────────────────────
     # /settings
     # ─────────────────────────────────────────────
@@ -172,23 +338,74 @@ def register_handlers(bot):
         user_settings = settings.get_user_settings(message.chat.id)
         grouping = user_settings.get("group_media", False)
         status = "ON 🟢" if grouping else "OFF 🔴"
+        
+        is_main = getattr(bot, 'is_main_bot', False)
+        is_admin = False
+        mode = "public"
+        if is_main:
+            admin_ids = [int(i.strip()) for i in os.getenv('ADMIN_IDS', '').split(',') if i.strip()]
+            if message.chat.id in admin_ids:
+                is_admin = True
+                main_settings = settings.get_global_settings()
+                mode = main_settings.get("mode", "public")
+                
         text = (f"⚙️ Settings\n\n"
                 f"Group Media: {status}\n\n"
                 f"If ON — files are grouped into albums when storing (no upload limit).\n"
                 f"If OFF — files stored individually, max 20 items per upload.")
-        bot.send_message(message.chat.id, text, reply_markup=keyboards.settings_keyboard(grouping))
+        if is_admin:
+            text += f"\n\nMain Bot Mode: {mode.upper()}"
+            
+        bot.send_message(message.chat.id, text, reply_markup=keyboards.settings_keyboard(grouping, is_admin, mode))
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'menu_settings')
+    def handle_menu_settings(call):
+        bot.answer_callback_query(call.id)
+        handle_settings(call.message)
 
     @bot.callback_query_handler(func=lambda call: call.data == 'toggle_grouping')
     def handle_toggle_grouping(call):
         new_val = settings.toggle_group_media(call.message.chat.id)
         status = "ON 🟢" if new_val else "OFF 🔴"
+        
+        is_main = getattr(bot, 'is_main_bot', False)
+        is_admin = False
+        mode = "public"
+        if is_main:
+            admin_ids = [int(i.strip()) for i in os.getenv('ADMIN_IDS', '').split(',') if i.strip()]
+            if call.message.chat.id in admin_ids:
+                is_admin = True
+                main_settings = settings.get_global_settings()
+                mode = main_settings.get("mode", "public")
+                
         bot.answer_callback_query(call.id, f"Group Media {status}")
         text = (f"⚙️ Settings\n\n"
                 f"Group Media: {status}\n\n"
                 f"If ON — files are grouped into albums when storing (no upload limit).\n"
                 f"If OFF — files stored individually, max 20 items per upload.")
+        if is_admin:
+            text += f"\n\nMain Bot Mode: {mode.upper()}"
+            
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
-                              reply_markup=keyboards.settings_keyboard(new_val))
+                              reply_markup=keyboards.settings_keyboard(new_val, is_admin, mode))
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'toggle_main_mode')
+    def handle_toggle_main_mode(call):
+        new_mode = settings.toggle_main_bot_mode()
+        
+        user_settings = settings.get_user_settings(call.message.chat.id)
+        grouping = user_settings.get("group_media", False)
+        status = "ON 🟢" if grouping else "OFF 🔴"
+        
+        bot.answer_callback_query(call.id, f"Mode changed to {new_mode.upper()}!")
+        text = (f"⚙️ Settings\n\n"
+                f"Group Media: {status}\n\n"
+                f"If ON — files are grouped into albums when storing (no upload limit).\n"
+                f"If OFF — files stored individually, max 20 items per upload.\n\n"
+                f"Main Bot Mode: {new_mode.upper()}")
+                
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                              reply_markup=keyboards.settings_keyboard(grouping, True, new_mode))
 
     # ─────────────────────────────────────────────
     # /batch
@@ -209,11 +426,19 @@ def register_handlers(bot):
     @bot.message_handler(commands=['batch'])
     @bot.message_handler(func=lambda m: m.text == "📦 Create Batch")
     def handle_batch(message):
+        if not check_permissions(bot, message, "upload"):
+            return
+            
         user_id = message.chat.id
         database.set_user_state(user_id, "batch_first")
         bot.send_message(user_id,
             "Forward the first message from your batch channel (with forward tag), "
             "or send its link (e.g. https://t.me/c/123456/1).", reply_markup=keyboards.cancel_keyboard())
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'menu_batch')
+    def handle_menu_batch(call):
+        bot.answer_callback_query(call.id)
+        handle_batch(call.message)
 
     # ─────────────────────────────────────────────
     # Catch-all — handles file collection during upload + batch states + clone states
@@ -233,6 +458,51 @@ def register_handlers(bot):
 
         # ── State machine ──
         state, state_data = database.get_user_state(user_id)
+        
+        if state == "awaiting_force_sub":
+            if not message.text:
+                return
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if not selected_bot:
+                return
+            token = selected_bot['token']
+            if message.text.strip() == '/disable':
+                database.update_cloned_bot_setting(token, 'force_sub', None)
+                bot.send_message(user_id, "✅ Force Sub has been disabled.")
+            else:
+                channel = message.text.strip()
+                database.update_cloned_bot_setting(token, 'force_sub', channel)
+                bot.send_message(user_id, f"✅ Force Sub has been set to: {channel}\n\nMake sure your cloned bot is an admin in this channel!")
+            database.set_user_state(user_id, None)
+            
+            # Send them back to the settings menu
+            bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            return
+            
+        if state == "awaiting_mods":
+            if not message.text:
+                return
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if not selected_bot:
+                return
+            token = selected_bot['token']
+            if message.text.strip() == '/clear':
+                database.update_cloned_bot_setting(token, 'moderators', [])
+                bot.send_message(user_id, "✅ All moderators have been removed.")
+            else:
+                try:
+                    mods = [int(x.strip()) for x in message.text.split()]
+                    database.update_cloned_bot_setting(token, 'moderators', mods)
+                    bot.send_message(user_id, f"✅ Set {len(mods)} moderators.")
+                except ValueError:
+                    bot.send_message(user_id, "❌ Invalid format. Please send a list of User IDs (numbers only).")
+                    return
+            database.set_user_state(user_id, None)
+            
+            bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            return
         
         if state == "awaiting_bot_token" and getattr(bot, 'is_main_bot', False):
             if not message.text:
