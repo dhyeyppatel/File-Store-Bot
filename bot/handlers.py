@@ -227,7 +227,10 @@ def register_handlers(bot):
             return
             
         text = f"🪄 **Customize Clone**\n\n➔ *Name:* @{selected_bot['username']}\n\nConfigure Your Clone Settings Using Given Buttons"
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+        try:
+            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+        except Exception:
+            pass
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('clone_') and 'clone_set_' not in call.data and 'mybots' not in call.data)
     def handle_clone_action(call):
@@ -337,8 +340,6 @@ def register_handlers(bot):
         elif action == 'restart':
             selected_bot = database.get_cloned_bot_by_id(bot_id)
             if selected_bot:
-                import os
-                import telebot
                 token = selected_bot['token']
                 base_url = (os.getenv('BASE_URL') or '').rstrip('/')
                 if not base_url:
