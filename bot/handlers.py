@@ -486,7 +486,7 @@ def register_handlers(bot):
     @bot.message_handler(content_types=[
         'audio', 'document', 'photo', 'sticker', 'video',
         'video_note', 'voice', 'location', 'contact',
-        'text', 'animation', 'poll', 'dice'
+        'text', 'animation', 'poll', 'dice', 'chat_shared', 'user_shared'
     ])
     def handle_all_messages(message):
         user_id = message.chat.id
@@ -511,9 +511,10 @@ def register_handlers(bot):
             else:
                 channel = None
                 
-                # Check for chat_shared
-                if getattr(message, 'chat_shared', None):
-                    channel = str(message.chat_shared.chat_id)
+                # Check for chat_shared / user_shared in message.json
+                shared_chat = message.json.get('chat_shared', {}) or message.json.get('user_shared', {})
+                if shared_chat:
+                    channel = str(shared_chat.get('chat_id', shared_chat.get('user_id')))
                 # Check for forward_from_chat
                 elif getattr(message, 'forward_from_chat', None):
                     channel = str(message.forward_from_chat.id)
