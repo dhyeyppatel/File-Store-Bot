@@ -2,16 +2,15 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 import os
 
 def upload_keyboard():
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        InlineKeyboardButton("✅ Done", callback_data="upload_done"),
-        InlineKeyboardButton("❌ Cancel", callback_data="cancel_action")
-    )
+    from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False, row_width=2)
+    markup.add(KeyboardButton("✅ Done"), KeyboardButton("❌ Cancel"))
     return markup
 
 def cancel_keyboard():
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("❌ Cancel", callback_data="cancel_action"))
+    from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    markup.add(KeyboardButton("❌ Cancel"))
     return markup
 
 def remove_keyboard():

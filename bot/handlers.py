@@ -273,7 +273,8 @@ def register_handlers(bot):
         upload_session.delete_session(user_id)
         database.set_user_state(user_id, None)
         is_main = getattr(bot, 'is_main_bot', False)
-        bot.send_message(user_id, "❌ Operation cancelled.", reply_markup=keyboards.main_menu_keyboard(is_main))
+        bot.send_message(user_id, "❌ Operation cancelled.", reply_markup=keyboards.remove_keyboard())
+        bot.send_message(user_id, "Menu activated 👇", reply_markup=keyboards.main_menu_keyboard(is_main))
 
     @bot.callback_query_handler(func=lambda call: call.data == 'cancel_action')
     def handle_cancel_action(call):
@@ -298,11 +299,11 @@ def register_handlers(bot):
         message_ids = session.get('message_ids', [])
         if not message_ids:
             upload_session.delete_session(user_id)
-            bot.send_message(user_id, "⚠️ You haven't sent anything yet.\n\nSend at least one file, then press ✅ Done.")
+            bot.send_message(user_id, "⚠️ You haven't sent anything yet.\n\nSend at least one file, then press ✅ Done.", reply_markup=keyboards.remove_keyboard())
             return
 
         is_main = getattr(bot, 'is_main_bot', False)
-        bot.send_message(user_id, f"⏳ Storing {len(message_ids)} item(s)...", reply_markup=keyboards.main_menu_keyboard(is_main))
+        bot.send_message(user_id, f"⏳ Storing {len(message_ids)} item(s)...", reply_markup=keyboards.remove_keyboard())
 
         result = storage.store_session(bot, user_id, message_ids)
         upload_session.delete_session(user_id)
@@ -320,8 +321,10 @@ def register_handlers(bot):
             if failed:
                 text += f"\n\n⚠️ {failed} item(s) could not be copied."
             bot.send_message(user_id, text, reply_markup=keyboards.share_keyboard(token, bot_username))
+            bot.send_message(user_id, "Menu activated 👇", reply_markup=keyboards.main_menu_keyboard(is_main))
         else:
             bot.send_message(user_id, "❌ Failed to store files. Please try again.")
+            bot.send_message(user_id, "Menu activated 👇", reply_markup=keyboards.main_menu_keyboard(is_main))
 
     @bot.callback_query_handler(func=lambda call: call.data == 'upload_done')
     def handle_upload_done_action(call):
