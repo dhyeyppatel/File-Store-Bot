@@ -79,7 +79,11 @@ def register_handlers(bot):
                     bot.send_message(message.chat.id, "❌ Cloning is only available on the main bot.")
                     return
                 database.set_user_state(message.chat.id, "awaiting_bot_token")
-                bot.send_message(message.chat.id, "🤖 Send me the Bot Token from @BotFather to clone this bot:")
+                bot.send_message(message.chat.id, "🤖 Send me the Bot Token from @BotFather to clone this bot:", reply_markup=keyboards.cancel_keyboard())
+                return
+                
+            if token == 'mybots':
+                handle_mybots(message)
                 return
                 
             upload_doc = storage.retrieve_upload_by_token(token)
@@ -164,7 +168,7 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
@@ -212,6 +216,11 @@ def register_handlers(bot):
         elif action == 'mods':
             database.set_user_state(call.message.chat.id, "awaiting_mods", {"bot_id": bot_id})
             bot.send_message(call.message.chat.id, "Send a list of User IDs (separated by space) to set as moderators.\n\nSend /clear to remove all moderators.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'db':
+            database.set_user_state(call.message.chat.id, "awaiting_db_channel", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the Database/Storage Channel ID (e.g. -100123456789) where this bot should store files.\n\n⚠️ Ensure your clone bot is an admin in that channel!", reply_markup=keyboards.cancel_keyboard())
             bot.answer_callback_query(call.id)
 
     # ─────────────────────────────────────────────
@@ -618,6 +627,23 @@ def register_handlers(bot):
             url = f"https://t.me/{bot_username}?start={token}"
             bot.send_message(user_id, f"✅ Batch created!\n\n📦 Items: {count}\n🔗 Link:\n{url}",
                              reply_markup=keyboards.share_keyboard(token, bot_username))
+            return
+            
+        if state == "awaiting_db_channel":
+            if not message.text:
+                return
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if not selected_bot:
+                return
+            token = selected_bot['token']
+            
+            channel = message.text.strip()
+            database.update_cloned_bot_setting(token, 'db_channel', channel)
+            bot.send_message(user_id, f"✅ Database Channel has been set to: {channel}\n\nMake sure your cloned bot is an admin in this channel!", reply_markup=keyboards.remove_keyboard())
+            database.set_user_state(user_id, None)
+            
+            bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
 
         # ── Upload session collection ──

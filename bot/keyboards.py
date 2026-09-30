@@ -85,7 +85,7 @@ def clone_settings_keyboard(bot_id):
         InlineKeyboardButton("ACCESS TOKEN", callback_data=f"clone_token_{bot_id}")
     )
     markup.add(
-        InlineKeyboardButton("TRANSFER DB", callback_data=f"clone_db_{bot_id}"),
+        InlineKeyboardButton("DB CHANNEL", callback_data=f"clone_db_{bot_id}"),
         InlineKeyboardButton("DEACTIVATE", callback_data=f"clone_deact_{bot_id}")
     )
     markup.add(

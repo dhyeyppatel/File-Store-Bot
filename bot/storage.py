@@ -27,6 +27,15 @@ def store_session(bot, user_id, items_data):
     storage_chat_id = os.getenv('STORAGE_CHAT_ID')
     db = get_db()
 
+    if not getattr(bot, 'is_main_bot', False):
+        clone_info = db.cloned_bots.find_one({"token": bot.token})
+        if clone_info and clone_info.get('db_channel'):
+            storage_chat_id = clone_info.get('db_channel')
+            
+    if not storage_chat_id:
+        print("[store_session] No storage_chat_id available.")
+        return None
+
     storage_message_ids = []
     failed = 0
 
@@ -110,7 +119,7 @@ def store_session(bot, user_id, items_data):
         "token_hash": token_hash,
         "status": "stored",
         "items": storage_message_ids,
-        "source_chat_id": None,
+        "source_chat_id": storage_chat_id,
         "item_count": len(storage_message_ids),
         "created_at": datetime.now(timezone.utc),
     })
