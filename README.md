@@ -17,6 +17,7 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
   - **Force Sub**: Require users to join a specific channel before they can retrieve files.
   - **Moderators**: Assign specific users who can upload and create batches.
   - **Public/Private Modes**: Restrict uploads to only admins/moderators (Private) or allow anyone to upload (Public).
+  - **Auto Delete**: Automatically delete files sent to users after a certain time. *(Requires setting up a cron job like cron-job.org to ping `https://your-vercel-domain.vercel.app/api?cron=true` every 1 minute)*.
 - **Inline Menus**: Clean and modern UI using inline buttons instead of bulky reply keyboards.
 
 ## Setup

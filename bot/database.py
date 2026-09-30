@@ -62,6 +62,27 @@ def delete_cloned_bot_by_id(bot_id):
     db = get_db()
     from bson.objectid import ObjectId
     db.cloned_bots.delete_one({"_id": ObjectId(bot_id)})
+    
+# ─────────────────────────────────────────────
+# Auto Delete Queue
+# ─────────────────────────────────────────────
+
+def enqueue_auto_delete(bot_token, chat_id, message_id, delete_at):
+    db = get_db()
+    db.auto_delete_queue.insert_one({
+        "bot_token": bot_token,
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "delete_at": delete_at
+    })
+
+def get_pending_auto_deletes(current_time):
+    db = get_db()
+    return list(db.auto_delete_queue.find({"delete_at": {"$lte": current_time}}))
+
+def remove_auto_delete(doc_id):
+    db = get_db()
+    db.auto_delete_queue.delete_one({"_id": doc_id})
 
 def update_cloned_bot_token(bot_id, new_token, new_username):
     db = get_db()

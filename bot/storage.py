@@ -165,13 +165,17 @@ def send_upload_items(bot, user_id, upload_doc, protect_content=False):
     source = upload_doc.get("source_chat_id") or os.getenv('STORAGE_CHAT_ID')
     items = upload_doc.get('items', [])
 
+    sent_ids = []
     for chunk in chunk_list(items, 100):
         try:
-            bot.copy_messages(
+            res = bot.copy_messages(
                 chat_id=user_id,
                 from_chat_id=source,
                 message_ids=chunk,
                 protect_content=protect_content
             )
+            sent_ids.extend([m.message_id for m in res])
         except Exception as e:
             print(f"[send_upload_items] copy_messages failed: {e}")
+            
+    return sent_ids

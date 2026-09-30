@@ -239,7 +239,7 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener', 'stats', 'startmsg'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener', 'stats', 'startmsg', 'autodel'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
@@ -286,6 +286,11 @@ def register_handlers(bot):
         elif action == 'startmsg':
             database.set_user_state(call.message.chat.id, "awaiting_start_msg", {"bot_id": bot_id})
             bot.send_message(call.message.chat.id, "Send the new custom START message for your clone bot.\n\nUse {mention} to mention the user, {username} for their username, and {id} for their User ID.\n\nSend /clear to remove the custom message.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'autodel':
+            database.set_user_state(call.message.chat.id, "awaiting_autodel", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the Auto-Delete time in minutes (e.g. `5` for 5 minutes).\nThe bot will automatically delete files sent to users after this time.\n\nSend `/disable` to turn it off.", parse_mode="Markdown", reply_markup=keyboards.cancel_keyboard())
             bot.answer_callback_query(call.id)
             
         elif action == 'forcesub':
@@ -457,12 +462,20 @@ def register_handlers(bot):
             
             # Check if NO FORWARD is enabled for this bot
             protect = False
+            auto_delete = None
             if not getattr(bot, 'is_main_bot', False):
                 clone_info = database.get_cloned_bot_by_token(bot.token)
                 if clone_info:
                     protect = clone_info.get("no_forward", False)
+                    auto_delete = clone_info.get("auto_delete")
                     
-            storage.send_upload_items(bot, call.message.chat.id, upload_doc, protect_content=protect)
+            sent_ids = storage.send_upload_items(bot, call.message.chat.id, upload_doc, protect_content=protect)
+            if auto_delete and sent_ids:
+                import time
+                delete_at = time.time() + (auto_delete * 60)
+                for msg_id in sent_ids:
+                    database.enqueue_auto_delete(bot.token, call.message.chat.id, msg_id, delete_at)
+                bot.send_message(call.message.chat.id, f"🕒 *Note: These files will be deleted in {auto_delete} minutes.*", parse_mode="Markdown")
         else:
             bot.answer_callback_query(call.id, "❌ Invalid or expired link.", show_alert=True)
 
@@ -725,6 +738,30 @@ def register_handlers(bot):
                 else:
                     database.update_cloned_bot_setting(selected_bot['token'], "start_message", text)
                     bot.send_message(user_id, "✅ Custom START message updated.")
+                database.set_user_state(user_id, None)
+                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            return
+            
+        if state == "awaiting_autodel":
+            if not message.text:
+                return
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                text = message.text.strip().lower()
+                if text == "/disable":
+                    database.update_cloned_bot_setting(selected_bot['token'], "auto_delete", None)
+                    bot.send_message(user_id, "✅ Auto-Delete has been disabled.")
+                else:
+                    try:
+                        minutes = int(text)
+                        if minutes <= 0:
+                            raise ValueError()
+                        database.update_cloned_bot_setting(selected_bot['token'], "auto_delete", minutes)
+                        bot.send_message(user_id, f"✅ Auto-Delete has been set to {minutes} minutes.")
+                    except ValueError:
+                        bot.send_message(user_id, "❌ Invalid input. Please send a positive number of minutes, or /disable.")
+                        return
                 database.set_user_state(user_id, None)
                 bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return

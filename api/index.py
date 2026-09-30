@@ -43,6 +43,41 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if 'cron=true' in self.path:
+            import time
+            import telebot
+            import bot.database as database
+            import bot.telegram as tg_module
+            
+            pending = database.get_pending_auto_deletes(time.time())
+            
+            # Group by bot_token to reuse bot instances
+            by_token = {}
+            for doc in pending:
+                t = doc['bot_token']
+                if t not in by_token:
+                    by_token[t] = []
+                by_token[t].append(doc)
+                
+            for token, docs in by_token.items():
+                try:
+                    tg_bot = tg_module.get_bot(token)
+                    for doc in docs:
+                        try:
+                            tg_bot.delete_message(doc['chat_id'], doc['message_id'])
+                        except Exception as e:
+                            print(f"Failed to delete {doc['message_id']} for {doc['chat_id']}: {e}")
+                        finally:
+                            database.remove_auto_delete(doc['_id'])
+                except Exception as e:
+                    print(f"Bot init error: {e}")
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(f"Processed {len(pending)} auto-deletes.".encode('utf-8'))
+            return
+            
         if 'setup=true' in self.path:
             import telebot
             from telebot.types import BotCommand
