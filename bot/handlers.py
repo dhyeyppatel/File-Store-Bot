@@ -215,7 +215,7 @@ def register_handlers(bot):
             
         if action == 'forcesub':
             database.set_user_state(call.message.chat.id, "awaiting_force_sub", {"bot_id": bot_id})
-            bot.send_message(call.message.chat.id, "Send the Channel Username (e.g. @channel) or ID (e.g. -100123456) for Force Sub.\n\nSend /disable to turn it off.", reply_markup=keyboards.cancel_keyboard())
+            bot.send_message(call.message.chat.id, "Choose your force sub channel using appeared buttons.\nOr forward any message from the channel.\n\nSend /disable to turn it off.\n\nMake sure your bot is admin in that channel!", reply_markup=keyboards.force_sub_select_keyboard())
             bot.answer_callback_query(call.id)
             
         elif action == 'mods':
@@ -499,32 +499,43 @@ def register_handlers(bot):
         state, state_data = database.get_user_state(user_id)
         
         if state == "awaiting_force_sub":
-            if not message.text:
-                return
             bot_id = state_data.get('bot_id')
             selected_bot = database.get_cloned_bot_by_id(bot_id)
             if not selected_bot:
                 return
             token = selected_bot['token']
-            if message.text.strip() == '/disable':
+            
+            if message.text and message.text.strip() == '/disable':
                 database.update_cloned_bot_setting(token, 'force_sub', None)
-                bot.send_message(user_id, "✅ Force Sub has been disabled.")
+                bot.send_message(user_id, "✅ Force Sub has been disabled.", reply_markup=keyboards.remove_keyboard())
             else:
-                channel = message.text.strip()
+                channel = None
                 
-                # Sanitize input
-                if "t.me/" in channel:
-                    channel = "@" + channel.split("t.me/")[-1].strip().strip("/")
-                elif channel.startswith("@") or channel.startswith("-100"):
-                    pass
-                elif channel.isdigit() or (channel.startswith("-") and channel[1:].isdigit()):
-                    if not channel.startswith("-100"):
-                        channel = "-100" + channel.lstrip("-")
-                else:
-                    channel = "@" + channel
+                # Check for chat_shared
+                if getattr(message, 'chat_shared', None):
+                    channel = str(message.chat_shared.chat_id)
+                # Check for forward_from_chat
+                elif getattr(message, 'forward_from_chat', None):
+                    channel = str(message.forward_from_chat.id)
+                elif message.text:
+                    channel = message.text.strip()
+                    # Sanitize text input
+                    if "t.me/" in channel:
+                        channel = "@" + channel.split("t.me/")[-1].strip().strip("/")
+                    elif channel.startswith("@") or channel.startswith("-100"):
+                        pass
+                    elif channel.isdigit() or (channel.startswith("-") and channel[1:].isdigit()):
+                        if not channel.startswith("-100"):
+                            channel = "-100" + channel.lstrip("-")
+                    else:
+                        channel = "@" + channel
+                
+                if not channel:
+                    return
                     
                 database.update_cloned_bot_setting(token, 'force_sub', channel)
-                bot.send_message(user_id, f"✅ Force Sub has been set to: {channel}\n\nMake sure your cloned bot is an admin in this channel!")
+                bot.send_message(user_id, f"✅ Force Sub has been set to: {channel}\n\nMake sure your cloned bot is an admin in this channel!", reply_markup=keyboards.remove_keyboard())
+            
             database.set_user_state(user_id, None)
             
             # Send them back to the settings menu

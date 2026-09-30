@@ -108,3 +108,12 @@ def force_sub_keyboard(channel_url, bot_username=None, original_text=None):
         # Pass the original command back so the user can just click it after joining
         markup.add(InlineKeyboardButton("🔄 Try Again", url=f"https://t.me/{bot_username}?start={original_text.replace('/start ', '')}"))
     return markup
+
+def force_sub_select_keyboard():
+    from telebot.types import ReplyKeyboardMarkup, KeyboardButton, KeyboardButtonRequestChat
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    channel_btn = KeyboardButton("select channel", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))
+    group_btn = KeyboardButton("select group", request_chat=KeyboardButtonRequestChat(request_id=2, chat_is_channel=False))
+    markup.row(channel_btn, group_btn)
+    markup.row(KeyboardButton("❌ Cancel"))
+    return markup
