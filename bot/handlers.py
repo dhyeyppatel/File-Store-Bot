@@ -154,14 +154,24 @@ def register_handlers(bot):
             else:
                 bot.send_message(message.chat.id, "❌ Invalid or expired link.")
         else:
-            msg = "Welcome to the File Store Bot!\nUse the menu below to navigate."
             is_main = getattr(bot, 'is_main_bot', False)
-            if is_main:
-                msg += "\n\nYou can also manage your bots using /mybots."
+            if not is_main:
+                clone_info = database.get_cloned_bot_by_token(bot.token)
+                msg = clone_info.get("start_message") if clone_info else None
+                
+            if not msg:
+                msg = "Welcome to the File Store Bot!\nUse the menu below to navigate."
+                if is_main:
+                    msg += "\n\nYou can also manage your bots using /mybots."
+            else:
+                msg = msg.replace("{mention}", f"[{message.from_user.first_name}](tg://user?id={message.from_user.id})")
+                msg = msg.replace("{username}", message.from_user.username or message.from_user.first_name)
+                msg = msg.replace("{id}", str(message.from_user.id))
                 
             bot.send_message(
                 message.chat.id, 
                 msg, 
+                parse_mode="Markdown",
                 reply_markup=keyboards.main_menu_keyboard(is_main)
             )
 
@@ -225,7 +235,7 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener', 'stats'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener', 'stats', 'startmsg'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
@@ -269,7 +279,12 @@ def register_handlers(bot):
                 bot.answer_callback_query(call.id, f"Bot is now {status}", show_alert=True)
             return
             
-        if action == 'forcesub':
+        elif action == 'startmsg':
+            database.set_user_state(call.message.chat.id, "awaiting_start_msg", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the new custom START message for your clone bot.\n\nUse {mention} to mention the user, {username} for their username, and {id} for their User ID.\n\nSend /clear to remove the custom message.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'forcesub':
             database.set_user_state(call.message.chat.id, "awaiting_force_sub", {"bot_id": bot_id})
             bot.send_message(call.message.chat.id, "Choose your force sub channel using appeared buttons.\nOr forward any message from the channel.\n\nSend /disable to turn it off.\n\nMake sure your bot is admin in that channel!", reply_markup=keyboards.force_sub_select_keyboard())
             bot.answer_callback_query(call.id)
@@ -293,6 +308,7 @@ def register_handlers(bot):
                 markup.add(telebot.types.InlineKeyboardButton("🔙 Back", callback_data=f"clone_cancel_{bot_id}"))
                 
                 bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=markup)
+            bot.answer_callback_query(call.id)
             return
             
         elif action == 'db':
@@ -694,6 +710,23 @@ def register_handlers(bot):
         # ── State machine ──
         state, state_data = database.get_user_state(user_id)
         
+        if state == "awaiting_start_msg":
+            if not message.text:
+                return
+            bot_id = state_data.get('bot_id')
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                text = message.text.strip()
+                if text == "/clear":
+                    database.update_cloned_bot_setting(selected_bot['token'], "start_message", None)
+                    bot.send_message(user_id, "✅ Custom START message cleared.")
+                else:
+                    database.update_cloned_bot_setting(selected_bot['token'], "start_message", text)
+                    bot.send_message(user_id, "✅ Custom START message updated.")
+                database.set_user_state(user_id, None)
+                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            return
+            
         if state in ["awaiting_short_apiurl", "awaiting_short_apikey", "awaiting_short_validity", "awaiting_short_tutorial"]:
             if not message.text:
                 return
