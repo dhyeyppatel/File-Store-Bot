@@ -110,3 +110,22 @@ def set_user_verified(user_id, bot_token, validity_hours):
         {"$set": {"expires_at": expires_at}},
         upsert=True
     )
+
+def track_clone_user(bot_token, user_id):
+    db = get_db()
+    db.clone_users.update_one(
+        {"bot_token": bot_token, "user_id": user_id},
+        {"$set": {"bot_token": bot_token}},
+        upsert=True
+    )
+
+def get_clone_user_count(bot_token):
+    db = get_db()
+    return db.clone_users.count_documents({"bot_token": bot_token})
+
+def increment_clone_upload(bot_token):
+    db = get_db()
+    db.cloned_bots.update_one(
+        {"token": bot_token},
+        {"$inc": {"total_uploads": 1}}
+    )

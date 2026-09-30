@@ -72,6 +72,9 @@ def register_handlers(bot):
 
     @bot.message_handler(commands=['start'])
     def handle_start(message):
+        if not getattr(bot, 'is_main_bot', False):
+            database.track_clone_user(bot.token, message.chat.id)
+            
         if not check_permissions(bot, message, "use"):
             return
             
@@ -222,7 +225,7 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore', 'shortener', 'stats'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
@@ -275,6 +278,22 @@ def register_handlers(bot):
             database.set_user_state(call.message.chat.id, "awaiting_mods", {"bot_id": bot_id})
             bot.send_message(call.message.chat.id, "Send a list of User IDs (separated by space) to set as moderators.\n\nSend /clear to remove all moderators.", reply_markup=keyboards.cancel_keyboard())
             bot.answer_callback_query(call.id)
+            
+        elif action == 'stats':
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            if selected_bot:
+                total_uploads = selected_bot.get("total_uploads", 0)
+                total_users = database.get_clone_user_count(selected_bot["token"])
+                
+                text = (f"📊 **Clone Bot Statistics**\n\n"
+                        f"👥 Total Users: `{total_users}`\n"
+                        f"📤 Total Uploads: `{total_uploads}`")
+                
+                markup = telebot.types.InlineKeyboardMarkup()
+                markup.add(telebot.types.InlineKeyboardButton("🔙 Back", callback_data=f"clone_cancel_{bot_id}"))
+                
+                bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=markup)
+            return
             
         elif action == 'db':
             database.set_user_state(call.message.chat.id, "awaiting_db_channel", {"bot_id": bot_id})
@@ -497,6 +516,10 @@ def register_handlers(bot):
 
         if result:
             token, count, failed = result
+            
+            if not is_main:
+                database.increment_clone_upload(bot.token)
+                
             
             # Use current bot's username instead of env var
             if not hasattr(bot, 'bot_username'):
@@ -920,6 +943,10 @@ def register_handlers(bot):
                 return
             token, count = storage.store_batch_session(user_id, ids, source_chat_id=chat_id)
             database.set_user_state(user_id, None)
+            
+            if not getattr(bot, 'is_main_bot', False):
+                database.increment_clone_upload(bot.token)
+                
             
             if not hasattr(bot, 'bot_username'):
                 bot.bot_username = bot.get_me().username
