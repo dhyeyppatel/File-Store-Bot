@@ -54,8 +54,13 @@ def check_permissions(bot, message, action="use"):
                         reply_markup=keyboards.force_sub_keyboard(url, bot_username, message.text)
                     )
                     return False
-            except telebot.apihelper.ApiTelegramException:
-                pass
+            except telebot.apihelper.ApiTelegramException as e:
+                # If an error happens (e.g. invalid channel ID, bot not admin), we should NOT let them pass!
+                bot.send_message(
+                    user_id,
+                    f"❌ **Force Sub Error** ❌\n\nThis bot's Force Sub channel is misconfigured or the bot is not an admin in it.\n\n`{e.result.text if hasattr(e, 'result') else str(e)}`\n\nPlease contact the bot owner to fix this."
+                )
+                return False
                 
     return True
 
@@ -506,6 +511,18 @@ def register_handlers(bot):
                 bot.send_message(user_id, "✅ Force Sub has been disabled.")
             else:
                 channel = message.text.strip()
+                
+                # Sanitize input
+                if "t.me/" in channel:
+                    channel = "@" + channel.split("t.me/")[-1].strip().strip("/")
+                elif channel.startswith("@") or channel.startswith("-100"):
+                    pass
+                elif channel.isdigit() or (channel.startswith("-") and channel[1:].isdigit()):
+                    if not channel.startswith("-100"):
+                        channel = "-100" + channel.lstrip("-")
+                else:
+                    channel = "@" + channel
+                    
                 database.update_cloned_bot_setting(token, 'force_sub', channel)
                 bot.send_message(user_id, f"✅ Force Sub has been set to: {channel}\n\nMake sure your cloned bot is an admin in this channel!")
             database.set_user_state(user_id, None)
