@@ -179,6 +179,24 @@ def register_handlers(bot):
     # ─────────────────────────────────────────────
     # Bot Cloning logic
     # ─────────────────────────────────────────────
+    
+    def get_clone_settings_text(selected_bot):
+        fsub = "Enabled" if selected_bot.get('force_sub') else 'Disabled'
+        autodel = f"{selected_bot.get('auto_delete')} mins" if selected_bot.get('auto_delete') else 'Disabled'
+        startmsg = "Custom" if selected_bot.get('start_message') else 'Default'
+        mode = "Private" if selected_bot.get('mode') == 'private' else "Public"
+        nofwd = "Yes" if selected_bot.get('no_forward') else "No"
+        short = "Enabled" if selected_bot.get('shortener_status') else "Disabled"
+        
+        text = f"🪄 **Customize Clone**\n\n➔ *Name:* @{selected_bot['username']}\n\n"
+        text += f"**Current Settings:**\n"
+        text += f"• **Force Sub:** {fsub}\n"
+        text += f"• **Auto Delete:** {autodel}\n"
+        text += f"• **Start Msg:** {startmsg}\n"
+        text += f"• **Mode:** {mode} | **No Fwd:** {nofwd}\n"
+        text += f"• **Shortener:** {short}\n\n"
+        text += "Configure Your Clone Settings Using Given Buttons"
+        return text
 
     @bot.message_handler(commands=['clone'])
     @bot.message_handler(func=lambda m: m.text == "🤖 Clone Bot")
@@ -227,9 +245,8 @@ def register_handlers(bot):
             bot.answer_callback_query(call.id, "Bot not found.", show_alert=True)
             return
             
-        text = f"🪄 **Customize Clone**\n\n➔ *Name:* @{selected_bot['username']}\n\nConfigure Your Clone Settings Using Given Buttons"
         try:
-            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.edit_message_text(get_clone_settings_text(selected_bot), call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
         except Exception:
             pass
 
@@ -340,7 +357,8 @@ def register_handlers(bot):
             bot.answer_callback_query(call.id, "Bot Deleted")
             
         elif action == 'cancel':
-            bot.edit_message_text("Customize Clone Settings:", call.message.chat.id, call.message.message_id, reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            selected_bot = database.get_cloned_bot_by_id(bot_id)
+            bot.edit_message_text(get_clone_settings_text(selected_bot), call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             bot.answer_callback_query(call.id, "Cancelled")
             
         elif action == 'restart':
@@ -398,7 +416,7 @@ def register_handlers(bot):
         token = selected_bot['token']
         
         if action == 'back':
-            bot.edit_message_text("Customize Clone Settings:", call.message.chat.id, call.message.message_id, reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.edit_message_text(get_clone_settings_text(selected_bot), call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             bot.answer_callback_query(call.id)
             return
             
@@ -739,7 +757,7 @@ def register_handlers(bot):
                     database.update_cloned_bot_setting(selected_bot['token'], "start_message", text)
                     bot.send_message(user_id, "✅ Custom START message updated.")
                 database.set_user_state(user_id, None)
-                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+                bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
             
         if state == "awaiting_autodel":
@@ -763,7 +781,7 @@ def register_handlers(bot):
                         bot.send_message(user_id, "❌ Invalid input. Please send a positive number of minutes, or /disable.")
                         return
                 database.set_user_state(user_id, None)
-                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+                bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
             
         if state in ["awaiting_short_apiurl", "awaiting_short_apikey", "awaiting_short_validity", "awaiting_short_tutorial"]:
@@ -852,7 +870,7 @@ def register_handlers(bot):
             database.set_user_state(user_id, None)
             
             # Send them back to the settings menu
-            bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
             
         if state == "awaiting_mods":
@@ -876,7 +894,7 @@ def register_handlers(bot):
                     return
             database.set_user_state(user_id, None)
             
-            bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
         
         if state == "awaiting_bot_token" and getattr(bot, 'is_main_bot', False):
@@ -976,11 +994,11 @@ def register_handlers(bot):
                 database.set_user_state(user_id, None)
                 
                 bot.edit_message_text(f"✅ Token updated successfully!\n\nYour bot is now live at @{bot_info.username}.", user_id, bot_msg.message_id)
-                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+                bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             except Exception as e:
                 bot.edit_message_text(f"❌ Invalid token or error connecting to Telegram: {e}", user_id, bot_msg.message_id)
                 database.set_user_state(user_id, None)
-                bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+                bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
 
         if state == "batch_first":
@@ -1043,7 +1061,7 @@ def register_handlers(bot):
             bot.send_message(user_id, f"✅ Database Channel has been set to: {channel}\n\nMake sure your cloned bot is an admin in this channel!", reply_markup=keyboards.remove_keyboard())
             database.set_user_state(user_id, None)
             
-            bot.send_message(user_id, "Customize Clone Settings:", reply_markup=keyboards.clone_settings_keyboard(bot_id))
+            bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
 
         # ── Upload session collection ──
