@@ -82,18 +82,23 @@ def clone_settings_keyboard(bot_id):
     )
     markup.add(
         InlineKeyboardButton("NO FORWARD", callback_data=f"clone_nofwd_{bot_id}"),
-        InlineKeyboardButton("ACCESS TOKEN", callback_data=f"clone_token_{bot_id}")
+        InlineKeyboardButton("MODE", callback_data=f"clone_mode_{bot_id}")
     )
     markup.add(
         InlineKeyboardButton("DB CHANNEL", callback_data=f"clone_db_{bot_id}"),
         InlineKeyboardButton("DEACTIVATE", callback_data=f"clone_deact_{bot_id}")
     )
     markup.add(
-        InlineKeyboardButton("MODE", callback_data=f"clone_mode_{bot_id}"),
+        InlineKeyboardButton("STATS", callback_data=f"clone_stats_{bot_id}")
+    )
+    
+    markup.add(InlineKeyboardButton("⏤ Manage Token ⏤", callback_data="clone_ignore"))
+    
+    markup.add(
+        InlineKeyboardButton("UPDATE TOKEN", callback_data=f"clone_token_{bot_id}"),
         InlineKeyboardButton("RESTART", callback_data=f"clone_restart_{bot_id}")
     )
     markup.add(
-        InlineKeyboardButton("STATS", callback_data=f"clone_stats_{bot_id}"),
         InlineKeyboardButton("DELETE", callback_data=f"clone_delete_{bot_id}")
     )
     markup.add(

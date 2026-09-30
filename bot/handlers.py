@@ -173,10 +173,14 @@ def register_handlers(bot):
         action = call.data.split('_')[1]
         
         # Check if we should stub it
-        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart'] 
+        implemented_actions = ['forcesub', 'mods', 'mode', 'nofwd', 'deact', 'db', 'token', 'delete', 'confirmdel', 'cancel', 'restart', 'ignore'] 
         
         if action not in implemented_actions and action != 'settings':
             bot.answer_callback_query(call.id, "Feature coming soon!", show_alert=True)
+            return
+            
+        if action == 'ignore':
+            bot.answer_callback_query(call.id)
             return
             
         bot_id = call.data.split('_', 2)[2]
