@@ -10,12 +10,6 @@ class handler(BaseHTTPRequestHandler):
         # Verify webhook secret if configured
         secret_token = self.headers.get('X-Telegram-Bot-Api-Secret-Token')
         expected_secret = os.getenv('WEBHOOK_SECRET')
-        
-        parsed = urlparse(self.path)
-        qs = parse_qs(parsed.query)
-        req_token = qs.get('token', [None])[0]
-        print(f"[POST DEBUG] path={self.path}, has_secret_header={'YES' if secret_token else 'NO'}, expected_secret={'SET' if expected_secret else 'NOT SET'}, match={secret_token == expected_secret}, clone_token={req_token[:20] + '...' if req_token else 'MAIN'}")
-        
         if expected_secret and secret_token != expected_secret:
             self.send_response(403)
             self.end_headers()
@@ -55,6 +49,7 @@ class handler(BaseHTTPRequestHandler):
             import bot.database as database
             import bot.telegram as tg_module
             
+            # ── Auto-delete processing ──
             pending = database.get_pending_auto_deletes(time.time())
             
             # Group by bot_token to reuse bot instances
@@ -78,10 +73,64 @@ class handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     print(f"Bot init error: {e}")
 
+            # ── Auto-heal webhooks if env vars changed ──
+            healed = []
+            base_url = (os.getenv('BASE_URL') or '').rstrip('/')
+            expected_secret = os.getenv('WEBHOOK_SECRET') or ''
+            
+            if base_url:
+                import hashlib
+                config_hash = hashlib.md5(f"{base_url}|{expected_secret}".encode()).hexdigest()
+                db = database.get_db()
+                stored = db.bot_config.find_one({"_id": "webhook_config"})
+                stored_hash = stored.get("hash") if stored else None
+                
+                if stored_hash != config_hash:
+                    # Env vars changed — re-register ALL webhooks
+                    # Main bot
+                    try:
+                        main_bot = tg_module.get_bot()
+                        main_url = f"{base_url}/api"
+                        if expected_secret:
+                            main_bot.set_webhook(url=main_url, secret_token=expected_secret)
+                        else:
+                            main_bot.set_webhook(url=main_url)
+                        healed.append("main")
+                    except Exception as e:
+                        print(f"[CRON] Main bot heal error: {e}")
+                    
+                    # Clone bots
+                    try:
+                        clones = list(db.cloned_bots.find({"status": "active"}))
+                        for clone in clones:
+                            clone_token = clone.get('token')
+                            if not clone_token:
+                                continue
+                            try:
+                                clone_bot = telebot.TeleBot(clone_token, threaded=False)
+                                clone_url = f"{base_url}/api?token={clone_token}"
+                                if expected_secret:
+                                    clone_bot.set_webhook(url=clone_url, secret_token=expected_secret)
+                                else:
+                                    clone_bot.set_webhook(url=clone_url)
+                                healed.append(clone.get('username', clone_token[:10]))
+                            except Exception as e:
+                                print(f"[CRON] Clone heal error ({clone_token[:10]}): {e}")
+                    except Exception as e:
+                        print(f"[CRON] Clone heal scan error: {e}")
+                    
+                    # Save new hash so we don't re-register again next cron
+                    db.bot_config.update_one(
+                        {"_id": "webhook_config"},
+                        {"$set": {"hash": config_hash}},
+                        upsert=True
+                    )
+
+            heal_msg = f", healed={healed}" if healed else ""
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
-            self.wfile.write(f"Processed {len(pending)} auto-deletes.".encode('utf-8'))
+            self.wfile.write(f"Processed {len(pending)} auto-deletes{heal_msg}.".encode('utf-8'))
             return
             
         if 'setup=true' in self.path:
