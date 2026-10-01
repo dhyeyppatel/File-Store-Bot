@@ -1082,6 +1082,7 @@ def register_handlers(bot):
             
             try:
                 new_bot = telebot.TeleBot(token)
+                new_bot.delete_webhook(drop_pending_updates=True)
                 bot_info = new_bot.get_me()
                 
                 base_url = (os.getenv('BASE_URL') or '').rstrip('/')

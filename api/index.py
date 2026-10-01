@@ -129,6 +129,42 @@ class handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(f"Setup Error: {e}".encode('utf-8'))
             return
+            
+        if 'setup_clones=true' in self.path:
+            import bot.database as database
+            import bot.telegram as tg_module
+            
+            db = database.get_db()
+            clones = list(db.cloned_bots.find({"status": "active"}))
+            
+            base_url = (os.getenv('BASE_URL') or '').rstrip('/')
+            if not base_url:
+                host = self.headers.get('Host', '')
+                base_url = f"https://{host}"
+                
+            secret_token = os.getenv('WEBHOOK_SECRET')
+            
+            success_count = 0
+            for clone in clones:
+                token = clone.get('token')
+                if not token: continue
+                
+                try:
+                    tg_bot = tg_module.get_bot(token)
+                    webhook_url = f"{base_url}/api?token={token}"
+                    if secret_token:
+                        tg_bot.set_webhook(url=webhook_url, secret_token=secret_token)
+                    else:
+                        tg_bot.set_webhook(url=webhook_url)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Failed to setup clone {token}: {e}")
+                    
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(f"Successfully re-registered webhooks for {success_count}/{len(clones)} clone bots.".encode('utf-8'))
+            return
 
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
