@@ -10,6 +10,12 @@ class handler(BaseHTTPRequestHandler):
         # Verify webhook secret if configured
         secret_token = self.headers.get('X-Telegram-Bot-Api-Secret-Token')
         expected_secret = os.getenv('WEBHOOK_SECRET')
+        
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        req_token = qs.get('token', [None])[0]
+        print(f"[POST DEBUG] path={self.path}, has_secret_header={'YES' if secret_token else 'NO'}, expected_secret={'SET' if expected_secret else 'NOT SET'}, match={secret_token == expected_secret}, clone_token={req_token[:20] + '...' if req_token else 'MAIN'}")
+        
         if expected_secret and secret_token != expected_secret:
             self.send_response(403)
             self.end_headers()
