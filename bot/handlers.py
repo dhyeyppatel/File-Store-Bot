@@ -1127,22 +1127,25 @@ def register_handlers(bot):
                 return
             new_token = message.text.strip()
             
-            if database.is_bot_cloned(new_token):
-                bot.send_message(user_id, "❌ This bot token is already cloned!")
-                database.set_user_state(user_id, None)
-                return
-                
             bot_id = state_data.get('bot_id')
             selected_bot = database.get_cloned_bot_by_id(bot_id)
             if not selected_bot:
                 return
+            
+            is_same_token = (new_token == selected_bot.get('token'))
+            
+            # Block if this token belongs to a DIFFERENT clone (not this one)
+            if not is_same_token and database.is_bot_cloned(new_token):
+                bot.send_message(user_id, "❌ This bot token is already used by another clone!")
+                database.set_user_state(user_id, None)
+                return
                 
-            bot_msg = bot.send_message(user_id, "⏳ Verifying new bot token...")
+            bot_msg = bot.send_message(user_id, "⏳ Verifying bot token...")
             
             try:
-                import telebot
-                import os
                 new_bot = telebot.TeleBot(new_token)
+                # Delete old webhook first to clear any stale config
+                new_bot.delete_webhook(drop_pending_updates=True)
                 bot_info = new_bot.get_me()
                 
                 base_url = (os.getenv('BASE_URL') or '').rstrip('/')
@@ -1160,11 +1163,15 @@ def register_handlers(bot):
                 else:
                     new_bot.set_webhook(url=webhook_url)
                     
-                # Update DB
+                # Update DB (no-op if same token, still refreshes username)
                 database.update_cloned_bot_token(bot_id, new_token, bot_info.username)
                 database.set_user_state(user_id, None)
                 
-                bot.edit_message_text(f"✅ Token updated successfully!\n\nYour bot is now live at @{bot_info.username}.", user_id, bot_msg.message_id)
+                if is_same_token:
+                    success_msg = f"✅ Webhook re-registered! @{bot_info.username} is now working."
+                else:
+                    success_msg = f"✅ Token updated successfully!\n\nYour bot is now live at @{bot_info.username}."
+                bot.edit_message_text(success_msg, user_id, bot_msg.message_id)
                 bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             except Exception as e:
                 bot.edit_message_text(f"❌ Invalid token or error connecting to Telegram: {e}", user_id, bot_msg.message_id)
