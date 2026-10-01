@@ -660,8 +660,17 @@ def register_handlers(bot):
         bot.send_message(message.chat.id, "🔍 Searching...")
         
         db = database.get_db()
+        
+        # Exclude uploads from private clone bots to prevent data leaks
+        private_clones = list(db.cloned_bots.find({"status": "active", "mode": "private"}, {"username": 1}))
+        private_usernames = [c["username"] for c in private_clones if c.get("username")]
+        
         regex_query = {"$regex": query, "$options": "i"}
-        results = list(db.uploads.find({"search_text": regex_query, "raw_token": {"$exists": True}}).limit(100))
+        search_filter = {"search_text": regex_query, "raw_token": {"$exists": True}}
+        if private_usernames:
+            search_filter["bot_username"] = {"$nin": private_usernames}
+        
+        results = list(db.uploads.find(search_filter).limit(100))
         
         if not results:
             bot.send_message(message.chat.id, "❌ No files found matching your query.\n\n*Note: Only files uploaded after the search feature was added will appear here.*", parse_mode="Markdown")
