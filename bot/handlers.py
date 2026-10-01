@@ -109,6 +109,8 @@ def register_handlers(bot):
                             if clone_info:
                                 val = clone_info.get("shortener_validity", 24)
                                 database.set_user_verified(message.chat.id, bot.token, val)
+                                renewed = clone_info.get("shortener_renewed", 0) + 1
+                                database.update_cloned_bot_setting(bot.token, "shortener_renewed", renewed)
                                 bot.send_message(message.chat.id, "✅ You have been successfully verified!")
                     else:
                         bot.send_message(message.chat.id, "❌ This verification link is invalid or belongs to another user.")
@@ -123,7 +125,8 @@ def register_handlers(bot):
                 if not getattr(bot, 'is_main_bot', False):
                     clone_info = database.get_cloned_bot_by_token(bot.token)
                     if clone_info and clone_info.get("shortener_status"):
-                        if not database.is_user_verified(message.chat.id, bot.token):
+                        whitelist = clone_info.get("shortener_whitelist", [])
+                        if message.chat.id not in whitelist and not database.is_user_verified(message.chat.id, bot.token):
                             api_url = clone_info.get("shortener_api_url")
                             api_key = clone_info.get("shortener_api_key")
                             if api_url and api_key:
@@ -417,17 +420,15 @@ def register_handlers(bot):
             if selected_bot:
                 status = selected_bot.get("shortener_status", False)
                 status_text = "Enabled ✅" if status else "Disabled ❌"
-                url = selected_bot.get("shortener_api_url", "Not Set")
-                key = selected_bot.get("shortener_api_key", "Not Set")
                 val = selected_bot.get("shortener_validity", 24)
+                renewed = selected_bot.get("shortener_renewed", 0)
                 
-                text = (f"**Shortener Settings**\n\n"
+                text = (f"**Access Token**\n\n"
                         f"Users need to pass a shortened link to gain special access to messages from all clone shareable links. "
                         f"This access will be valid for the next custom validity period.\n\n"
-                        f"- Status: {status_text}\n"
-                        f"- API URL: `{url}`\n"
-                        f"- API Key: `{key}`\n"
-                        f"- Validity: `{val} hours`")
+                        f"~ Status: {status_text}\n"
+                        f"~ Validity: {val} hours\n"
+                        f"~ Renewed: {renewed} users")
                 bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.shortener_settings_keyboard(bot_id, selected_bot))
                 bot.answer_callback_query(call.id)
 
@@ -456,16 +457,14 @@ def register_handlers(bot):
             # Refresh menu
             selected_bot["shortener_status"] = not current
             status_text = "Enabled ✅" if not current else "Disabled ❌"
-            url = selected_bot.get("shortener_api_url", "Not Set")
-            key = selected_bot.get("shortener_api_key", "Not Set")
             val = selected_bot.get("shortener_validity", 24)
-            text = (f"**Shortener Settings**\n\n"
+            renewed = selected_bot.get("shortener_renewed", 0)
+            text = (f"**Access Token**\n\n"
                     f"Users need to pass a shortened link to gain special access to messages from all clone shareable links. "
                     f"This access will be valid for the next custom validity period.\n\n"
-                    f"- Status: {status_text}\n"
-                    f"- API URL: `{url}`\n"
-                    f"- API Key: `{key}`\n"
-                    f"- Validity: `{val} hours`")
+                    f"~ Status: {status_text}\n"
+                    f"~ Validity: {val} hours\n"
+                    f"~ Renewed: {renewed} users")
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=keyboards.shortener_settings_keyboard(bot_id, selected_bot))
             return
             
@@ -488,6 +487,15 @@ def register_handlers(bot):
             database.set_user_state(call.message.chat.id, "awaiting_short_tutorial", {"bot_id": bot_id})
             bot.send_message(call.message.chat.id, "Send the tutorial URL (e.g. a Telegram post or YouTube video link on how to bypass).", reply_markup=keyboards.cancel_keyboard())
             bot.answer_callback_query(call.id)
+
+        elif action == 'whitelist':
+            database.set_user_state(call.message.chat.id, "awaiting_short_whitelist", {"bot_id": bot_id})
+            bot.send_message(call.message.chat.id, "Send the User ID of the person you want to whitelist (they will bypass the shortener). You can also send multiple IDs separated by spaces.", reply_markup=keyboards.cancel_keyboard())
+            bot.answer_callback_query(call.id)
+            
+        elif action == 'referal':
+            # Implement referral logic or instructions
+            bot.answer_callback_query(call.id, "Referral feature coming soon!", show_alert=True)
 
     # ─────────────────────────────────────────────
     # Send all files when user clicks the button
@@ -642,6 +650,35 @@ def register_handlers(bot):
     def handle_upload_done_action(call):
         bot.answer_callback_query(call.id)
         handle_done(call.message)
+
+    @bot.message_handler(commands=['help'])
+    def handle_help(message):
+        help_text = (
+            "📖 **File Store Bot Help & Features**\n\n"
+            "**📤 Uploading Files**\n"
+            "• `/upload` - Starts a normal upload session.\n"
+            "• `/pupload <password>` - Starts an upload session protected by a password.\n"
+            "• `/supload <stars>` - Starts an upload session requiring Telegram Stars to unlock.\n"
+            "*How to use:* Send the command, forward/send your files, then click ✅ Done.\n\n"
+            "**📦 Batch Uploading (From Channel)**\n"
+            "• `/batch` - Create a link from a sequence of messages in a channel.\n"
+            "• `/pbatch <password>` - Password-protected batch.\n"
+            "• `/sbatch <stars>` - Telegram Stars protected batch.\n"
+            "*How to use:* Ensure bot is channel admin. Send the command, then forward the first and last message.\n\n"
+            "**🤖 Cloning (Main Bot Only)**\n"
+            "• `/clone` - Create your own bot that works identically to this one.\n"
+            "• `/mybots` - Manage your clones (Force Sub, Shortener, Auto Delete, etc).\n\n"
+            "**🔍 Search (Main Bot Only)**\n"
+            "• `/search <query>` - Find files uploaded across the main bot and public clones.\n\n"
+            "**⚙️ Settings**\n"
+            "• `/settings` - Toggle grouping of multiple files into a single album."
+        )
+        bot.send_message(message.chat.id, help_text, parse_mode="Markdown")
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'menu_help')
+    def handle_menu_help(call):
+        bot.answer_callback_query(call.id)
+        handle_help(call.message)
 
     # ─────────────────────────────────────────────
     # /search
@@ -964,7 +1001,7 @@ def register_handlers(bot):
                 bot.send_message(user_id, get_clone_settings_text(database.get_cloned_bot_by_id(bot_id)), parse_mode="Markdown", reply_markup=keyboards.clone_settings_keyboard(bot_id))
             return
             
-        if state in ["awaiting_short_apiurl", "awaiting_short_apikey", "awaiting_short_validity", "awaiting_short_tutorial"]:
+        if state in ["awaiting_short_apiurl", "awaiting_short_apikey", "awaiting_short_validity", "awaiting_short_tutorial", "awaiting_short_whitelist"]:
             if not message.text:
                 return
             val = message.text.strip()
@@ -988,6 +1025,20 @@ def register_handlers(bot):
             elif state == "awaiting_short_tutorial":
                 database.update_cloned_bot_setting(token, "shortener_tutorial", val)
                 bot.send_message(user_id, "✅ Tutorial URL updated.")
+            elif state == "awaiting_short_whitelist":
+                ids = []
+                for x in val.split():
+                    try:
+                        ids.append(int(x.strip()))
+                    except ValueError:
+                        pass
+                if ids:
+                    existing = selected_bot.get("shortener_whitelist", [])
+                    new_list = list(set(existing + ids))
+                    database.update_cloned_bot_setting(token, "shortener_whitelist", new_list)
+                    bot.send_message(user_id, f"✅ Added {len(ids)} user(s) to the whitelist.")
+                else:
+                    bot.send_message(user_id, "❌ No valid user IDs found.")
                 
             database.set_user_state(user_id, None)
             
@@ -995,16 +1046,15 @@ def register_handlers(bot):
             selected_bot = database.get_cloned_bot_by_id(bot_id)
             status = selected_bot.get("shortener_status", False)
             status_text = "Enabled ✅" if status else "Disabled ❌"
-            url = selected_bot.get("shortener_api_url", "Not Set")
-            key = selected_bot.get("shortener_api_key", "Not Set")
             val = selected_bot.get("shortener_validity", 24)
-            text = (f"**Shortener Settings**\n\n"
+            renewed = selected_bot.get("shortener_renewed", 0)
+            
+            text = (f"**Access Token**\n\n"
                     f"Users need to pass a shortened link to gain special access to messages from all clone shareable links. "
                     f"This access will be valid for the next custom validity period.\n\n"
-                    f"- Status: {status_text}\n"
-                    f"- API URL: `{url}`\n"
-                    f"- API Key: `{key}`\n"
-                    f"- Validity: `{val} hours`")
+                    f"~ Status: {status_text}\n"
+                    f"~ Validity: {val} hours\n"
+                    f"~ Renewed: {renewed} users")
             bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=keyboards.shortener_settings_keyboard(bot_id, selected_bot))
             return
 
@@ -1117,7 +1167,8 @@ def register_handlers(bot):
                     BotCommand("start", "Start the bot"),
                     BotCommand("upload", "Start a new file upload session"),
                     BotCommand("batch", "Create a link from existing channel messages"),
-                    BotCommand("settings", "Configure bot preferences")
+                    BotCommand("settings", "Configure bot preferences"),
+                    BotCommand("help", "Show detailed help and features")
                 ]
                 new_bot.set_my_commands(commands)
                 

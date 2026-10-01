@@ -43,6 +43,7 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 - `STORAGE_CHAT_ID`: The ID of your private storage channel (e.g., `-100123456789`). Ensure the bot is an admin here!
 - `BOT_USERNAME`: The bot's username without `@` (e.g., `MyFileStoreBot`).
 - `WEBHOOK_SECRET`: (Optional) A secret token for validating incoming webhooks.
+- `BASE_URL`: (Optional but recommended) Your Vercel project's base URL (e.g., `https://my-file-bot.vercel.app`). Required for the "Restart" button in clone bots to automatically update webhooks.
 
 ## Usage
 
@@ -57,3 +58,4 @@ Built with Python, Vercel Serverless Functions, Telegram Bot API, and MongoDB.
 - **/settings**: Toggle media grouping and change the main bot's Public/Private mode (Admins only).
 - **/clone**: Start the process to clone the bot.
 - **/mybots**: View and configure comprehensive settings for your cloned bots.
+- **/help**: Show detailed help and feature descriptions.

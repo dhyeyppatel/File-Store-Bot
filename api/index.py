@@ -168,7 +168,11 @@ class handler(BaseHTTPRequestHandler):
                     BotCommand("start", "Start the bot"),
                     BotCommand("upload", "Start a new file upload session"),
                     BotCommand("batch", "Create a link from existing channel messages"),
-                    BotCommand("settings", "Configure bot preferences")
+                    BotCommand("search", "Search for files"),
+                    BotCommand("clone", "Clone this bot"),
+                    BotCommand("mybots", "Manage your cloned bots"),
+                    BotCommand("settings", "Configure bot preferences"),
+                    BotCommand("help", "Show detailed help and features")
                 ]
                 tg_bot.set_my_commands(commands)
 

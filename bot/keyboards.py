@@ -55,9 +55,14 @@ def main_menu_keyboard(is_main_bot=False):
             InlineKeyboardButton("🤖 Clone Bot", callback_data="menu_clone"),
             InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings")
         )
+        markup.add(
+            InlineKeyboardButton("❓ Help", callback_data="menu_help"),
+            InlineKeyboardButton("💬 Common Thread", url="https://t.me/commonthread")
+        )
     else:
         markup.add(
-            InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings")
+            InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings"),
+            InlineKeyboardButton("❓ Help", callback_data="menu_help")
         )
         main_bot = os.getenv('BOT_USERNAME')
         if main_bot:
@@ -128,6 +133,10 @@ def shortener_settings_keyboard(bot_id, clone_info):
     markup.add(
         InlineKeyboardButton("Validity", callback_data=f"short_validity_{bot_id}"),
         InlineKeyboardButton("Tutorial", callback_data=f"short_tutorial_{bot_id}")
+    )
+    markup.add(
+        InlineKeyboardButton("Whitelisters", callback_data=f"short_whitelist_{bot_id}"),
+        InlineKeyboardButton("Referal", callback_data=f"short_referal_{bot_id}")
     )
     markup.add(InlineKeyboardButton("BACK", callback_data=f"short_back_{bot_id}"))
     return markup
