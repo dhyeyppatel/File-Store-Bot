@@ -95,6 +95,19 @@ class handler(BaseHTTPRequestHandler):
                             main_bot.set_webhook(url=main_url, secret_token=expected_secret)
                         else:
                             main_bot.set_webhook(url=main_url)
+                        
+                        from telebot.types import BotCommand
+                        commands = [
+                            BotCommand("start", "Start the bot"),
+                            BotCommand("upload", "Start a new file upload session"),
+                            BotCommand("batch", "Create a link from existing channel messages"),
+                            BotCommand("search", "Search for files"),
+                            BotCommand("clone", "Clone this bot"),
+                            BotCommand("mybots", "Manage your cloned bots"),
+                            BotCommand("settings", "Configure bot preferences"),
+                            BotCommand("help", "Show detailed help and features")
+                        ]
+                        main_bot.set_my_commands(commands)
                         healed.append("main")
                     except Exception as e:
                         print(f"[CRON] Main bot heal error: {e}")
@@ -113,6 +126,16 @@ class handler(BaseHTTPRequestHandler):
                                     clone_bot.set_webhook(url=clone_url, secret_token=expected_secret)
                                 else:
                                     clone_bot.set_webhook(url=clone_url)
+                                
+                                from telebot.types import BotCommand
+                                clone_commands = [
+                                    BotCommand("start", "Start the bot"),
+                                    BotCommand("upload", "Start a new file upload session"),
+                                    BotCommand("batch", "Create a link from existing channel messages"),
+                                    BotCommand("settings", "Configure bot preferences"),
+                                    BotCommand("help", "Show detailed help and features")
+                                ]
+                                clone_bot.set_my_commands(clone_commands)
                                 healed.append(clone.get('username', clone_token[:10]))
                             except Exception as e:
                                 print(f"[CRON] Clone heal error ({clone_token[:10]}): {e}")
@@ -215,6 +238,17 @@ class handler(BaseHTTPRequestHandler):
                         tg_bot.set_webhook(url=webhook_url, secret_token=secret_token)
                     else:
                         tg_bot.set_webhook(url=webhook_url)
+                    
+                    from telebot.types import BotCommand
+                    clone_commands = [
+                        BotCommand("start", "Start the bot"),
+                        BotCommand("upload", "Start a new file upload session"),
+                        BotCommand("batch", "Create a link from existing channel messages"),
+                        BotCommand("settings", "Configure bot preferences"),
+                        BotCommand("help", "Show detailed help and features")
+                    ]
+                    tg_bot.set_my_commands(clone_commands)
+                    
                     success_count += 1
                 except Exception as e:
                     print(f"Failed to setup clone {token}: {e}")

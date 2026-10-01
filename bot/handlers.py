@@ -1223,6 +1223,16 @@ def register_handlers(bot):
                     new_bot.set_webhook(url=webhook_url, secret_token=secret_token)
                 else:
                     new_bot.set_webhook(url=webhook_url)
+                
+                from telebot.types import BotCommand
+                commands = [
+                    BotCommand("start", "Start the bot"),
+                    BotCommand("upload", "Start a new file upload session"),
+                    BotCommand("batch", "Create a link from existing channel messages"),
+                    BotCommand("settings", "Configure bot preferences"),
+                    BotCommand("help", "Show detailed help and features")
+                ]
+                new_bot.set_my_commands(commands)
                     
                 # Update DB (no-op if same token, still refreshes username)
                 database.update_cloned_bot_token(bot_id, new_token, bot_info.username)
